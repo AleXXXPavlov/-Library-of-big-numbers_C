@@ -6,6 +6,8 @@
 
 int NOTATION = 10; // система счисления, с которой записаны числа в массив
 
+int Sub_Abs(int*, int*, size_t, size_t);
+
 /* Определения структуры bn и ее функций */
 struct bn_s {
 	int* ptr_body; // указатель на начало массива цифр
@@ -79,24 +81,40 @@ int bn_init_string(bn* Obj, const char* str) {
 	size_t length = strlen(str);
 	size_t i = 0;
 
-	Obj->sign = 1;
-	if (str[0] == '-') {
+	if (str[0] == '-')
+	{
 		Obj->sign = -1;
 		++i;
 	}
-	
-	Obj->size = length - i;
-
-	int* arr_num = (int*)calloc(Obj->size, sizeof(int));
-	if (arr_num != NULL) {
-		for (size_t j = 0; j < Obj->size; ++j) {
-			arr_num[j] = str[length - j - 1] & 0x0F;
+	if (i == 0) {
+		while (i < length)
+		{
+			if (str[i] == '0')
+			{
+				++i;
+			}
+			else
+			{
+				break;
+			}
 		}
 	}
+	
+	if (i < length) {
+		Obj->sign == 0 ? Obj->sign = 1 : NULL;
+		Obj->size = length - i;
 
-	Obj->ptr_body = arr_num;
+		int* arr_num = (int*)calloc(Obj->size, sizeof(int));
+		if (arr_num != NULL) {
+			for (size_t j = 0; j < Obj->size; ++j) {
+				arr_num[j] = str[length - j - 1] & 0x0F;
+			}
+		}
 
-	return 0;
+		Obj->ptr_body = arr_num;
+	}
+
+	return BN_OK;
 }
 
 /* Инициализация числа представлением строки в некоторой системе счисления */
@@ -109,7 +127,7 @@ int bn_init_string_radix(bn* Obj, const char* str, int radix) {
 }
 
 /* Функция для прибавления одного большого числа к другому */
-int bn_add_to(bn* Obj1, const bn* Obj2) {
+int bn_add_to(bn* Obj1, bn const* Obj2) {
 	if (Obj1 == NULL || Obj2 == NULL) {
 		return BN_NULL_OBJECT;
 	}
@@ -125,7 +143,7 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 
 	// Сравнение знаков
 
-	if (Obj1->sign == Obj2->sign) // случай, когда оба знака совпадают
+	if (Obj1->sign == Obj2->sign) 
 	{
 		/* Добавление куска памяти с 0, для сравнивания размеров */
 		if (Obj1->size < Obj2->size) {
@@ -183,12 +201,12 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 		}
 			
 	}
-	else // случай, когда у чисел разные знаки 
+	else // разные знаки 
 	{
 		bn* Obj_c = bn_new();
 		Obj_c = bn_init(Obj2); // временная копия Obj2 со знаком +
 
-		Obj_c->sign = -(Obj_c->sign);
+		Obj_c->sign = -(Obj_c->sign); // Obj_c->sign == Obj1->sign
 
 		int code =  bn_sub_to(Obj1, Obj_c);
 		bn_delete(Obj_c);
@@ -199,7 +217,7 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 }
 
 /* Функция для вычитания из одного большого числа другое */
-int bn_sub_to(bn* Obj1, const bn* Obj2) {
+int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	if (Obj1 == NULL || Obj2 == NULL) {
 		return BN_NULL_OBJECT;
 	}
@@ -207,13 +225,142 @@ int bn_sub_to(bn* Obj1, const bn* Obj2) {
 	// Проверки на равенство нулю
 	if (Obj1->sign == 0) {
 		Obj1 = bn_init(Obj2);
+		Obj1->sign = -Obj1->sign;
 		return BN_OK;
 	}
 	if (Obj2->sign == 0) {
 		return BN_OK;
 	}
 
+	if (Obj1->sign == Obj2->sign)
+	{
+		int param_res = bn_cmp(Obj1, Obj2);
+		
+		if (param_res * Obj1->sign == 1) {
+			return Sub_Abs(Obj1->ptr_body, Obj2->ptr_body, Obj1->size, Obj2->size);
+		}
+		else if (param_res * Obj1->sign == -1)
+		{
+			Obj1->sign = -Obj1->sign;
+		
+			return Sub_Abs(Obj1->ptr_body, Obj2->ptr_body, Obj1->size, Obj2->size);
+		}
+		else // param_res == 0
+		{
+			bn* bn_null = bn_new();
+			Obj1 = bn_init(bn_null);
+			return BN_OK;
+		}
+	}
+	else // разные знаки
+	{
+		bn* Obj_c = bn_new();
+		Obj_c = bn_init(Obj2);
 
+		Obj_c->sign = -(Obj_c->sign); // Obj_c->sign == Obj1->sign
+
+		int code = bn_add_to(Obj1, Obj_c);
+		bn_delete(Obj_c);
+		return code;
+	}
+
+	return BN_OK;
+}
+
+
+/* Функция для сравнивания двух больших чисел */
+int bn_cmp(bn const* Obj1, bn const* Obj2) {
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	// сравнивание по знакам
+	if (Obj1->sign > Obj2->sign)
+	{
+		return 1;
+	}
+	if (Obj1->sign < Obj2->sign)
+	{
+		return -1;
+	}
+	if (Obj1->sign == 0 && Obj2->sign == 0)
+	{
+		return 0;
+	}
+
+	// оба знака либо положительны, либо отрицательны
+	if (Obj1->size != Obj2->size) {
+		int param_res0 = 0;
+		if (Obj1->size > Obj2->size)
+		{
+			param_res0 = 1;
+		}
+		else if (Obj1->size < Obj2->size)
+		{
+			param_res0 = -1;
+		}
+
+		return param_res0 * Obj1->sign;
+	}
+	else // размеры равны
+	{
+		int param_res = 0;
+		for (int i = Obj1->size - 1; i >= 0; --i)
+		{
+			if (Obj1->ptr_body[i] > Obj2->ptr_body[i])
+			{
+				param_res = 1;
+				break;
+			}
+			else if (Obj1->ptr_body[i] < Obj2->ptr_body[i])
+			{
+				param_res = -1;
+				break;
+			}
+		}
+
+		return param_res * Obj1->sign;
+	}
+}
+
+/* Функция для разности двух модулей */
+int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
+	if (ptr_body1 == NULL || ptr_body2 == NULL)
+	{
+		return BN_NO_MEMORY;
+	}
+
+	int flag = 0; // параметр, сигнализирующий, о получении слишком маленького числа в ячейке
+
+	for (size_t i = 0; i < size1; ++i) {
+		ptr_body1[i] -= flag + (i < size2 ? ptr_body2[i] : 0);
+		flag = ptr_body1[i] < 0;
+
+		if (flag != 0)
+		{
+			ptr_body1[i] += NOTATION;
+		}
+	}
+
+	if (ptr_body1[size1 - 1] == 0)
+	{
+		int count_zero = 0;
+		while (ptr_body1[size1 - 1 - count_zero] == 0)
+		{
+			++count_zero;
+		}
+
+		ptr_body1 = (int*)realloc(ptr_body1, (size1 - count_zero) * sizeof(int));
+		if (ptr_body1 == NULL)
+		{
+			return BN_NO_MEMORY;
+		}
+
+		size1 -= count_zero;;
+	}
+
+	return BN_OK;
 }
 
 /* Функция для вывода данных о большом числе */
@@ -235,21 +382,20 @@ int bn_print(bn const* Obj)
 
 int main() {
 	bn *bn1 = bn_new();
-	bn_init_string(bn1, "-79861676575787645234789058354867946580374654466");
+	bn_init_string(bn1, "-746547879861676575787645234789058354867946580374674664");
 
 	bn *bn2 = bn_new();
-	bn_init_string(bn2, "-85967846765754653554739756945702456438025345687436587");
-	
-	bn* bn0 = bn_new();
+	bn_init_string(bn2, "-7658237485934867573846");
 
 	bn_print(bn1);
 	bn_print(bn2);
-	int result = bn_add_to(bn1, bn2);
+	int result = bn_sub_to(bn1, bn2);
 	bn_print(bn1);
+	
+	printf("\n%d\n", result);
 
 	bn_delete(bn1);
 	bn_delete(bn2);
 
-	printf("\n%d\n", result);
 	return 0;
 }
