@@ -209,8 +209,7 @@ int bn_add_to(bn* Obj1, bn const* Obj2) {
 	else // разные знаки 
 	{
 		bn* Obj_c = bn_init(Obj2); // временная копия Obj2 со знаком +
-
-		Obj_c->sign = -(Obj_c->sign); // Obj_c->sign == Obj1->sign
+		bn_neg(Obj_c); // смена знака
 
 		int code = bn_sub_to(Obj1, Obj_c);
 		bn_delete(Obj_c);
@@ -229,7 +228,7 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	// Проверки на равенство нулю
 	if (Obj1->sign == 0) {
 		Obj1 = bn_init(Obj2);
-		Obj1->sign = -Obj1->sign;
+		bn_neg(Obj1);
 		return BN_OK;
 	}
 	if (Obj2->sign == 0) {
@@ -250,7 +249,7 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 
 			int result = Sub_Abs(Obj_c->ptr_body, Obj1->ptr_body, Obj_c->size, Obj1->size);
 			Analog_assignment(Obj1, Obj_c);
-			Obj1->sign = -(Obj1->sign);
+			bn_neg(Obj1);
 
 			bn_delete(Obj_c);
 			return result;		
@@ -265,8 +264,7 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	else // разные знаки
 	{
 		bn* Obj_c = bn_init(Obj2);
-
-		Obj_c->sign = -(Obj_c->sign); // Obj_c->sign == Obj1->sign
+		bn_neg(Obj_c); 
 
 		int code = bn_add_to(Obj1, Obj_c);
 		bn_delete(Obj_c);
@@ -331,6 +329,18 @@ int bn_cmp(bn const* Obj1, bn const* Obj2) {
 
 		return param_res * Obj1->sign;
 	}
+}
+
+/* Функция для смены знака*/
+int bn_neg(bn* Obj)
+{
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	Obj->sign = -(Obj->sign);
+	return BN_OK;
 }
 
 /* Функция для разности двух модулей */
