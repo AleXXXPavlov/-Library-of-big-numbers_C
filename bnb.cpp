@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 
+
 int NOTATION = 10; // система счисления, с которой записаны числа в массив
 
 int Sub_Abs(int*, int*, size_t, size_t);
@@ -343,6 +344,18 @@ int bn_neg(bn* Obj)
 	return BN_OK;
 }
 
+/* Функция для взятия модуля */
+int bn_abs(bn* Obj)
+{
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	Obj->sign == -1 ? Obj->sign = 1 : NULL;
+	return BN_OK;
+}
+
 /* Функция для разности двух модулей */
 int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
 	if (ptr_body1 == NULL || ptr_body2 == NULL)
@@ -440,6 +453,9 @@ int main()
 	int result = bn_sub_to(bn1, bn2);
 	bn_print(bn1);
 
+	bn_neg(bn2);
+	bn_print(bn2);
+
 	printf("\n%d\n", result);
 
 	bn_delete(bn1);
@@ -447,3 +463,4 @@ int main()
 
 	return 0;
 }
+
