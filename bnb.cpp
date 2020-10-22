@@ -7,6 +7,7 @@
 int NOTATION = 10; // система счисления, с которой записаны числа в массив
 
 int Sub_Abs(int*, int*, size_t, size_t);
+int Analog_assignment(bn*, bn*);
 
 /* Определения структуры bn и ее функций */
 struct bn_s {
@@ -35,12 +36,12 @@ bn* bn_new() {
 }
 
 /* Конструктор копирования */
-bn* bn_init(const bn *Obj) {
+bn* bn_init(const bn* Obj) {
 	if (Obj == NULL) {
 		return NULL;
 	}
 
-	bn* ptr_cbn = calloc(sizeof(bn), sizeof(int));
+	bn* ptr_cbn = bn_new();
 	if (ptr_cbn == NULL) {
 		return NULL;
 	}
@@ -50,11 +51,15 @@ bn* bn_init(const bn *Obj) {
 
 	ptr_cbn->ptr_body = calloc(ptr_cbn->size, sizeof(int));
 	if (ptr_cbn->ptr_body == NULL) {
-		free(ptr_cbn);
+		bn_delete(ptr_cbn);
 		return NULL;
 	}
 
-	memcpy(ptr_cbn->ptr_body, Obj->ptr_body, Obj->size);
+	for (size_t i = 0; i < ptr_cbn->size; ++i)
+	{
+		ptr_cbn->ptr_body[i] = Obj->ptr_body[i];
+	}
+
 	return ptr_cbn;
 }
 
@@ -99,7 +104,7 @@ int bn_init_string(bn* Obj, const char* str) {
 			}
 		}
 	}
-	
+
 	if (i < length) {
 		Obj->sign == 0 ? Obj->sign = 1 : NULL;
 		Obj->size = length - i;
@@ -143,7 +148,7 @@ int bn_add_to(bn* Obj1, bn const* Obj2) {
 
 	// Сравнение знаков
 
-	if (Obj1->sign == Obj2->sign) 
+	if (Obj1->sign == Obj2->sign)
 	{
 		/* Добавление куска памяти с 0, для сравнивания размеров */
 		if (Obj1->size < Obj2->size) {
@@ -154,7 +159,7 @@ int bn_add_to(bn* Obj1, bn const* Obj2) {
 				return BN_NO_MEMORY;
 			}
 
-			for (size_t j = Obj1->size; j < Obj2->size; ++j) 
+			for (size_t j = Obj1->size; j < Obj2->size; ++j)
 			{
 				Obj1->ptr_body[j] = 0;
 			}
@@ -166,8 +171,8 @@ int bn_add_to(bn* Obj1, bn const* Obj2) {
 
 		for (; i < Obj2->size; ++i) {
 			Obj1->ptr_body[i] += flag + Obj2->ptr_body[i];
-				
-			flag = (Obj1->ptr_body[i] >= NOTATION); 
+
+			flag = (Obj1->ptr_body[i] >= NOTATION);
 			if (flag != 0)
 			{
 				Obj1->ptr_body[i] -= NOTATION;
@@ -199,20 +204,19 @@ int bn_add_to(bn* Obj1, bn const* Obj2) {
 				Obj1->ptr_body[Obj1->size - 1] = flag;
 			}
 		}
-			
+
 	}
 	else // разные знаки 
 	{
-		bn* Obj_c = bn_new();
-		Obj_c = bn_init(Obj2); // временная копия Obj2 со знаком +
+		bn* Obj_c = bn_init(Obj2); // временная копия Obj2 со знаком +
 
 		Obj_c->sign = -(Obj_c->sign); // Obj_c->sign == Obj1->sign
 
-		int code =  bn_sub_to(Obj1, Obj_c);
+		int code = bn_sub_to(Obj1, Obj_c);
 		bn_delete(Obj_c);
 		return code;
 	}
-	
+
 	return BN_OK;
 }
 
@@ -235,15 +239,21 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	if (Obj1->sign == Obj2->sign)
 	{
 		int param_res = bn_cmp(Obj1, Obj2);
-		
-		if (param_res * Obj1->sign == 1) {
+
+		if ((param_res * Obj1->sign) == 1)  // |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = -1
+		{
 			return Sub_Abs(Obj1->ptr_body, Obj2->ptr_body, Obj1->size, Obj2->size);
 		}
-		else if (param_res * Obj1->sign == -1)
+		else if ((param_res * Obj1->sign) == -1) // |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = -1
 		{
-			Obj1->sign = -Obj1->sign;
-		
-			return Sub_Abs(Obj1->ptr_body, Obj2->ptr_body, Obj1->size, Obj2->size);
+			bn* Obj_c = bn_init(Obj2);
+
+			int result = Sub_Abs(Obj_c->ptr_body, Obj1->ptr_body, Obj_c->size, Obj1->size);
+			Analog_assignment(Obj1, Obj_c);
+			Obj1->sign = -(Obj1->sign);
+
+			bn_delete(Obj_c);
+			return result;		
 		}
 		else // param_res == 0
 		{
@@ -254,8 +264,7 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	}
 	else // разные знаки
 	{
-		bn* Obj_c = bn_new();
-		Obj_c = bn_init(Obj2);
+		bn* Obj_c = bn_init(Obj2);
 
 		Obj_c->sign = -(Obj_c->sign); // Obj_c->sign == Obj1->sign
 
@@ -332,8 +341,9 @@ int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
 	}
 
 	int flag = 0; // параметр, сигнализирующий, о получении слишком маленького числа в ячейке
+	size_t i = 0;
 
-	for (size_t i = 0; i < size1; ++i) {
+	for (; i < size1; ++i) {
 		ptr_body1[i] -= flag + (i < size2 ? ptr_body2[i] : 0);
 		flag = ptr_body1[i] < 0;
 
@@ -343,9 +353,9 @@ int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
 		}
 	}
 
-	if (ptr_body1[size1 - 1] == 0)
+	int count_zero = 0;
+	if (ptr_body1[size1 - 1 - count_zero] == 0)
 	{
-		int count_zero = 0;
 		while (ptr_body1[size1 - 1 - count_zero] == 0)
 		{
 			++count_zero;
@@ -356,9 +366,35 @@ int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
 		{
 			return BN_NO_MEMORY;
 		}
-
-		size1 -= count_zero;;
 	}
+	size1 -= count_zero;;
+	
+
+	return BN_OK;
+}
+
+/* Аналог присваивания */
+int Analog_assignment(bn* Obj1, bn* Obj2)
+{
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	Obj1->sign = Obj2->sign;
+	
+	Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, sizeof(int) * Obj2->size);
+	if (Obj1->ptr_body == NULL)
+	{
+		return BN_NO_MEMORY;
+	}
+
+	for (size_t i = 0; i < Obj2->size; ++i)
+	{
+		Obj1->ptr_body[i] = Obj2->ptr_body[i];
+	}
+
+	Obj1->size = Obj2->size;
 
 	return BN_OK;
 }
@@ -371,7 +407,7 @@ int bn_print(bn const* Obj)
 		return BN_NULL_OBJECT;
 	}
 	printf("\nSign = %d\nLength = %d\nAbsolute value = ", Obj->sign, Obj->size);
-	
+
 	for (int i = Obj->size - 1; i != -1; --i) {
 		printf("%d", Obj->ptr_body[i]);
 	}
@@ -380,18 +416,20 @@ int bn_print(bn const* Obj)
 	return BN_OK;
 }
 
-int main() {
-	bn *bn1 = bn_new();
-	bn_init_string(bn1, "-746547879861676575787645234789058354867946580374674664");
+int main()
+{
+	bn* bn1 = bn_new();
+	bn_init_string(bn1, "564365346538534795689734546566");
 
-	bn *bn2 = bn_new();
-	bn_init_string(bn2, "-7658237485934867573846");
+	bn const* bn2 = bn_new();
+	bn_init_string(bn2, "-65823775347737834657473657864754755673846");
 
 	bn_print(bn1);
 	bn_print(bn2);
+
 	int result = bn_sub_to(bn1, bn2);
 	bn_print(bn1);
-	
+
 	printf("\n%d\n", result);
 
 	bn_delete(bn1);
