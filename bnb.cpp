@@ -115,7 +115,7 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 	}
 
 	// Проверки на равенство нулю
-	if (Obj2->sign == 0) {
+	if (Obj1->sign == 0) {
 		Obj1 = bn_init(Obj2);
 		return BN_OK;
 	}
@@ -124,92 +124,96 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 	}
 
 	// Сравнение знаков
-	if (Obj1->ptr_body != NULL && Obj2->ptr_body != NULL)
+
+	if (Obj1->sign == Obj2->sign) // случай, когда оба знака совпадают
 	{
-		if (Obj1->sign == Obj2->sign) // случай, когда оба знака совпадают
-		{
-			/* Добавление куска памяти с 0, для сравнивания размеров */
-			if (Obj1->size < Obj2->size) {
+		/* Добавление куска памяти с 0, для сравнивания размеров */
+		if (Obj1->size < Obj2->size) {
 
-				Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, Obj2->size * sizeof(int));
-				if (Obj1->ptr_body == NULL)
-				{
-					return BN_NO_MEMORY;
-				}
-
-				for (size_t j = Obj1->size; j < Obj2->size; ++j) 
-				{
-					Obj1->ptr_body[j] = 0;
-				}
-
-				Obj1->size = Obj2->size;
+			Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, Obj2->size * sizeof(int));
+			if (Obj1->ptr_body == NULL)
+			{
+				return BN_NO_MEMORY;
 			}
 
-			size_t i = 0;
-			int flag = 0; // параметр, сигнализирующий, о получении слишком большого числа в ячейке
+			for (size_t j = Obj1->size; j < Obj2->size; ++j) 
+			{
+				Obj1->ptr_body[j] = 0;
+			}
+			Obj1->size = Obj2->size;
+		}
 
-			for (; i < Obj2->size; ++i) {
-				Obj1->ptr_body[i] += flag + Obj2->ptr_body[i];
+		size_t i = 0;
+		int flag = 0; // параметр, сигнализирующий, о получении слишком большого числа в ячейке
+
+		for (; i < Obj2->size; ++i) {
+			Obj1->ptr_body[i] += flag + Obj2->ptr_body[i];
 				
-				flag = (Obj1->ptr_body[i] >= NOTATION); 
+			flag = (Obj1->ptr_body[i] >= NOTATION); 
+			if (flag != 0)
+			{
+				Obj1->ptr_body[i] -= NOTATION;
+			}
+		}
+
+		if (flag != 0)
+		{
+			while (flag != 0 && i < Obj1->size)
+			{
+				Obj1->ptr_body[i] += flag;
+				flag = (Obj1->ptr_body[i] >= NOTATION);
 				if (flag != 0)
 				{
 					Obj1->ptr_body[i] -= NOTATION;
+					Obj1->ptr_body[i] += 1;
 				}
+				++i;
 			}
 
 			if (flag != 0)
 			{
-				while (flag != 0 && i < Obj1->size)
+				Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, (1 + Obj1->size) * sizeof(int));
+				if (Obj1->ptr_body == NULL)
 				{
-					Obj1->ptr_body[i] += flag;
-
-					flag = (Obj1->ptr_body[i] >= NOTATION);
-					if (flag != 0)
-					{
-						Obj1->ptr_body[i] -= NOTATION;
-						Obj1->ptr_body[i] += 1;
-					}
-
-					++i;
+					return BN_NO_MEMORY;
 				}
-
-				if (flag != 0)
-				{
-					Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, (1 + Obj1->size) * sizeof(int));
-					if (Obj1->ptr_body == NULL)
-					{
-						return BN_NO_MEMORY;
-					}
-
-					++(Obj1->size);
-
-					Obj1->ptr_body[Obj1->size - 1] = flag;
-				}
+				++(Obj1->size);
+				Obj1->ptr_body[Obj1->size - 1] = flag;
 			}
+		}
 			
-		}
-		else // случай, когда у чисел разные знаки 
-		{
-			bn* Obj_c = bn_new();
-			Obj_c = bn_init(Obj2); // временная копия Obj2 со знаком +
-
-			Obj_c->sign = -(Obj_c->sign);
-
-			int code =  bn_sub_to(Obj1, Obj_c);
-			bn_delete(Obj_c);
-			return code;
-		}
 	}
-	else {
-		return BN_NO_MEMORY;
-	}
+	else // случай, когда у чисел разные знаки 
+	{
+		bn* Obj_c = bn_new();
+		Obj_c = bn_init(Obj2); // временная копия Obj2 со знаком +
 
+		Obj_c->sign = -(Obj_c->sign);
+
+		int code =  bn_sub_to(Obj1, Obj_c);
+		bn_delete(Obj_c);
+		return code;
+	}
+	
 	return BN_OK;
 }
 
+/* Функция для вычитания из одного большого числа другое */
 int bn_sub_to(bn* Obj1, const bn* Obj2) {
-	return BN_OK;
+	if (Obj1 == NULL || Obj2 == NULL) {
+		return BN_NULL_OBJECT;
+	}
+
+	// Проверки на равенство нулю
+	if (Obj1->sign == 0) {
+		Obj1 = bn_init(Obj2);
+		return BN_OK;
+	}
+	if (Obj2->sign == 0) {
+		return BN_OK;
+	}
+
+
 }
 
 /* Функция для вывода данных о большом числе */
