@@ -1,4 +1,3 @@
-﻿
 #include "bnb.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,19 +5,6 @@
 #include <assert.h>
 
 int NOTATION = 10; // система счисления, с которой записаны числа в массив
-
-//int Change_Sign(bn*); // функция для смены знака
-
-/*int Change_Sign(bn* Obj) {
-	if (Obj == NULL) 
-	{
-		return BN_NULL_OBJECT;
-	}
-
-	Obj->sign == 1 ? Obj->sign = -1 : Obj ->sign = 1;
-	return BN_OK;
-}*/
-
 
 /* Определения структуры bn и ее функций */
 struct bn_s {
@@ -144,14 +130,18 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 		{
 			/* Добавление куска памяти с 0, для сравнивания размеров */
 			if (Obj1->size < Obj2->size) {
-				Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, Obj2->size);
-				if (Obj1->ptr_body == NULL) {
+
+				Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, Obj2->size * sizeof(int));
+				if (Obj1->ptr_body == NULL)
+				{
 					return BN_NO_MEMORY;
 				}
 
-				for (size_t j = Obj1->size; j < Obj2->size; ++j) {
+				for (size_t j = Obj1->size; j < Obj2->size; ++j) 
+				{
 					Obj1->ptr_body[j] = 0;
 				}
+
 				Obj1->size = Obj2->size;
 			}
 
@@ -172,7 +162,6 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 			{
 				while (flag != 0 && i < Obj1->size)
 				{
-					Obj1->ptr_body[i - 1] -= NOTATION;
 					Obj1->ptr_body[i] += flag;
 
 					flag = (Obj1->ptr_body[i] >= NOTATION);
@@ -187,11 +176,12 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 
 				if (flag != 0)
 				{
-					Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, 1);
+					Obj1->ptr_body = (int*)realloc(Obj1->ptr_body, (1 + Obj1->size) * sizeof(int));
 					if (Obj1->ptr_body == NULL)
 					{
 						return BN_NO_MEMORY;
 					}
+
 					++(Obj1->size);
 
 					Obj1->ptr_body[Obj1->size - 1] = flag;
@@ -203,7 +193,7 @@ int bn_add_to(bn* Obj1, const bn* Obj2) {
 		{
 			bn* Obj_c = bn_new();
 			Obj_c = bn_init(Obj2); // временная копия Obj2 со знаком +
-			//Change_Sign(Obj_c); // смена знака
+
 			Obj_c->sign = -(Obj_c->sign);
 
 			int code =  bn_sub_to(Obj1, Obj_c);
@@ -241,15 +231,20 @@ int bn_print(bn const* Obj)
 
 int main() {
 	bn *bn1 = bn_new();
-	bn_init_string(bn1, "4754384385748");
+	bn_init_string(bn1, "-79861676575787645234789058354867946580374654466");
 
 	bn *bn2 = bn_new();
-	bn_init_string(bn2, "4573465934473984575976598643789585428645784263575957235853858351375882567589086");
+	bn_init_string(bn2, "-85967846765754653554739756945702456438025345687436587");
 	
 	bn* bn0 = bn_new();
 
+	bn_print(bn1);
+	bn_print(bn2);
 	int result = bn_add_to(bn1, bn2);
 	bn_print(bn1);
+
+	bn_delete(bn1);
+	bn_delete(bn2);
 
 	printf("\n%d\n", result);
 	return 0;
