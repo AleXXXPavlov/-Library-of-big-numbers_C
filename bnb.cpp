@@ -9,6 +9,8 @@ int NOTATION = 10; // система счисления, с которой за�
 
 int Sub_Abs(int*, int*, size_t, size_t);
 int Analog_assignment(bn*, bn*);
+int* bn_add_nulls(int*, size_t, size_t);
+bn* bn_mul_to_col(bn*, bn*);
 
 /* Определения структуры bn и ее функций */
 struct bn_s {
@@ -107,7 +109,10 @@ int bn_init_string(bn* Obj, const char* str) {
 	}
 
 	if (i < length) {
-		Obj->sign == 0 ? Obj->sign = 1 : NULL;
+		if (Obj->sign == 0)
+		{
+			Obj->sign = 1;
+		}
 		Obj->size = length - i;
 
 		int* arr_num = (int*)calloc(Obj->size, sizeof(int));
@@ -275,6 +280,83 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	return BN_OK;
 }
 
+/* Функция для школьного умножения */
+bn* bn_mul_to_col(bn* Obj1, bn* Obj2)
+{
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return NULL;
+	}
+	if (Obj1->sign == 0 || Obj2->sign == 0)
+	{
+		bn* Obj_r = bn_new();
+		return Obj_r;
+	}
+
+	// Дополняем числа нулями для равенства обоих размеров одному четному числу
+	size_t maxsize = Obj1->size + Obj2->size;
+
+	// Реализация наивного алгоритма перемножения
+	bn* Obj_r = bn_new();
+	Obj_r->ptr_body = bn_add_nulls(Obj_r->ptr_body, Obj_r->size, maxsize);
+	Obj_r->size = maxsize;
+	Obj_r->sign = Obj1->sign * Obj2->sign;
+
+	for (size_t i = 0; i < Obj2->size; ++i)
+	{
+		int flag = 0; // флаг переноса
+
+		for (size_t j = 0; j < Obj1->size; ++j)
+		{
+			Obj_r->ptr_body[i + j] += flag + Obj1->ptr_body[j] * Obj2->ptr_body[i];
+			flag = Obj_r->ptr_body[i + j] / NOTATION;
+			Obj_r->ptr_body[i + j] %= NOTATION;
+		}
+
+		Obj_r->ptr_body[i + Obj1->size] += flag;
+	}
+
+
+	return Obj_r;
+}
+
+/* Функция для суммы двух больших чисел */
+bn* bn_add(bn const* Obj1, bn const* Obj2)
+{
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return NULL;
+	}
+
+	bn* Obj_r = bn_init(Obj1);
+
+	int code = bn_add_to(Obj_r, Obj2);
+	if (code != BN_OK)
+	{
+		return NULL;
+	}
+
+	return Obj_r;
+}
+
+/* Функция для вычитания двух больших чисел */
+bn* bn_sub(bn const* Obj1, bn const* Obj2)
+{
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return NULL;
+	}
+
+	bn* Obj_r = bn_init(Obj1);
+
+	int code = bn_sub_to(Obj_r, Obj2);
+	if (code != BN_OK)
+	{
+		return NULL;
+	}
+
+	return Obj_r;
+}
 
 /* Функция для сравнивания двух больших чисел */
 int bn_cmp(bn const* Obj1, bn const* Obj2) {
@@ -352,7 +434,10 @@ int bn_abs(bn* Obj)
 		return BN_NULL_OBJECT;
 	}
 
-	Obj->sign == -1 ? Obj->sign = 1 : NULL;
+	if (Obj->sign == -1)
+	{
+		Obj->sign = 1;
+	}
 	return BN_OK;
 }
 
@@ -422,6 +507,30 @@ int Analog_assignment(bn* Obj1, bn* Obj2)
 	return BN_OK;
 }
 
+/* Функция для добавления нулей для приведения к четному размеру массива */
+int* bn_add_nulls(int* arr, size_t size, size_t num) 
+{
+	if (arr == NULL || num == NULL)
+	{
+		return NULL;
+	}
+
+	int* arr_copy = (int*)calloc(num, sizeof(int));
+	if (arr_copy == NULL)
+	{
+		return NULL;
+	}
+
+	for (size_t i = 0; i < size; ++i)
+	{
+		arr_copy[i] = arr[i];
+	}
+
+	free(arr);
+
+	return arr_copy;
+}
+
 /* Функция для вывода данных о большом числе */
 int bn_print(bn const* Obj)
 {
@@ -441,26 +550,17 @@ int bn_print(bn const* Obj)
 
 int main()
 {
-	bn* bn1 = bn_new();
-	bn_init_string(bn1, "564365346538534795689734546566");
+	bn* bn1 = bn_new();	
+	bn_init_string(bn1, "34546566");
 
-	bn const* bn2 = bn_new();
-	bn_init_string(bn2, "-65823775347737834657473657864754755673846");
+	bn* bn2 = bn_new();
+	bn_init_string(bn2, "-4747474747");
 
 	bn_print(bn1);
 	bn_print(bn2);
 
-	int result = bn_sub_to(bn1, bn2);
-	bn_print(bn1);
-
-	bn_neg(bn2);
-	bn_print(bn2);
-
-	printf("\n%d\n", result);
-
-	bn_delete(bn1);
-	bn_delete(bn2);
-
+	bn* Obj_r = bn_mul_to_col(bn1, bn2);
+	bn_print(Obj_r);
 	return 0;
 }
 
