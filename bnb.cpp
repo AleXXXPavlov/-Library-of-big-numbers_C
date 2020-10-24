@@ -10,7 +10,7 @@ int NOTATION = 10; // система счисления, с которой за�
 int Sub_Abs(int*, int*, size_t, size_t);
 int Analog_assignment(bn*, bn*);
 int* bn_add_nulls(int*, size_t, size_t);
-bn* bn_mul_to_col(bn*, bn*);
+bn* bn_mul_to_col(bn const*, bn const*);
 
 /* Определения структуры bn и ее функций */
 struct bn_s {
@@ -280,8 +280,107 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	return BN_OK;
 }
 
-/* Функция для школьного умножения */
-bn* bn_mul_to_col(bn* Obj1, bn* Obj2)
+/* Функция для умножения одного числа на другое */
+int bn_mul_to(bn* Obj1, bn const* Obj2)
+{
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	int result = Analog_assignment(Obj1, bn_mul_to_col(Obj1, Obj2));
+
+	return result;
+}
+
+/* Функция для перемножения */
+bn* bn_mul(bn const* Obj1, bn const* Obj2)
+{
+	return bn_mul_to_col(Obj1, Obj2);
+}
+
+/* Функция для быстрого возведения в степень */
+int bn_pow_to(bn* Obj, int degree)
+{
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	if (degree == 0) // степень - ноль 
+	{
+		bn* bn_null = bn_new();
+		bn_null->sign = 1;
+		bn_null->ptr_body[0] = 1;
+
+		int result = Analog_assignment(Obj, bn_null);
+		bn_delete(bn_null);
+
+		return result;
+	}
+	if (degree == 1 || Obj->sign == 0)
+	{
+		return BN_OK;
+	}
+
+	int abs_degree = abs(degree); // для возведения только в неотрицательную степень
+
+	bn* Obj_c = bn_new();
+	Obj_c->sign = 1;
+	Obj_c->ptr_body[0] = 1;
+
+	while (abs_degree) 
+	{
+		if (abs_degree % 2 == 0)
+		{
+			abs_degree /= 2;
+
+			int res_mul = bn_mul_to(Obj, Obj);
+			if (res_mul != BN_OK)
+			{
+				return res_mul;
+			}
+		}
+		else
+		{
+			--abs_degree;
+
+			int res_mul = bn_mul_to(Obj_c, Obj);
+			if (res_mul != BN_OK)
+			{
+				return res_mul;
+			}
+		}
+	}
+
+	int res_ass = Analog_assignment(Obj, Obj_c);
+	return res_ass;
+}
+
+/* Функция для извлечения корня большого числа */
+int bn_root_to(bn* Obj, int reciprocal)
+{
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	if (reciprocal == 0)
+	{
+		bn* bn_null = bn_new();
+		int result = Analog_assignment(Obj, bn_null);
+		bn_delete(bn_null);
+
+		return result;
+	}
+	else
+	{
+
+	}
+}
+
+/* Функция для школьного перемножения */
+bn* bn_mul_to_col(bn const* Obj1, bn const* Obj2)
 {
 	if (Obj1 == NULL || Obj2 == NULL)
 	{
@@ -292,11 +391,23 @@ bn* bn_mul_to_col(bn* Obj1, bn* Obj2)
 		bn* Obj_r = bn_new();
 		return Obj_r;
 	}
+	if (Obj1->size == 1)
+	{
+		bn* Obj_r = bn_init(Obj2);
+		Obj_r->sign = Obj1->sign * Obj2->sign;
 
-	// Дополняем числа нулями для равенства обоих размеров одному четному числу
+		return Obj_r;
+	}
+	if (Obj2->size == 1)
+	{
+		bn* Obj_r = bn_init(Obj1);
+		Obj_r->sign = Obj1->sign * Obj2->sign;
+
+		return Obj_r;
+	}
+
 	size_t maxsize = Obj1->size + Obj2->size;
 
-	// Реализация наивного алгоритма перемножения
 	bn* Obj_r = bn_new();
 	Obj_r->ptr_body = bn_add_nulls(Obj_r->ptr_body, Obj_r->size, maxsize);
 	Obj_r->size = maxsize;
@@ -316,6 +427,15 @@ bn* bn_mul_to_col(bn* Obj1, bn* Obj2)
 		Obj_r->ptr_body[i + Obj1->size] += flag;
 	}
 
+	if (Obj_r->ptr_body[Obj_r->size - 1] == 0)
+	{
+		--Obj_r->size;
+		Obj_r->ptr_body = (int*)realloc(Obj_r->ptr_body, Obj_r->size*sizeof(int));
+		if (Obj1->ptr_body == NULL)
+		{
+			return BN_NO_MEMORY;
+		}
+	}
 
 	return Obj_r;
 }
@@ -441,6 +561,17 @@ int bn_abs(bn* Obj)
 	return BN_OK;
 }
 
+/* Функция, возвращающая информацию о знаке */
+int bn_sign(bn const* Obj)
+{
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	return Obj->sign;
+}
+
 /* Функция для разности двух модулей */
 int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
 	if (ptr_body1 == NULL || ptr_body2 == NULL)
@@ -477,7 +608,6 @@ int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
 	}
 	size1 -= count_zero;;
 	
-
 	return BN_OK;
 }
 
@@ -510,7 +640,7 @@ int Analog_assignment(bn* Obj1, bn* Obj2)
 /* Функция для добавления нулей для приведения к четному размеру массива */
 int* bn_add_nulls(int* arr, size_t size, size_t num) 
 {
-	if (arr == NULL || num == NULL)
+	if (arr == NULL)
 	{
 		return NULL;
 	}
@@ -559,8 +689,6 @@ int main()
 	bn_print(bn1);
 	bn_print(bn2);
 
-	bn* Obj_r = bn_mul_to_col(bn1, bn2);
-	bn_print(Obj_r);
+
 	return 0;
 }
-
