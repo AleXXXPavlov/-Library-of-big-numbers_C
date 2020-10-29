@@ -22,14 +22,14 @@ bn* bn_mul_col(bn*, bn const*);
 // Функция для добавления нулей для приведения к четному размеру массива
 int* bn_add_nulls(int*, size_t, size_t);
 
-// Функция для добавления нулей в ячейки, получая числа в ячейке с количеством цифр NUM, за исключением последней ячейки 
-int* bn_add_null_element(int*, size_t);
-
 // Функция для удаления впереди идущих нулей большого числа
 int Clean_Nulls(bn*);
 
 // Функция для сравнивания чисел с одинаковым знаком
 int bn_abs_cmp(bn const*, bn const*);
+
+// Функция для сдвига числа вправо c увеличением размера
+int bn_shift(bn*);
 
 // Функция для вывода структуры в консоль
 int bn_print(bn const*);
@@ -42,6 +42,7 @@ struct bn_s {
 	size_t size; // размер массива
 	int sign; // знак числа
 };
+
 
 /* Конструктор */
 bn* bn_new() {
@@ -70,8 +71,8 @@ bn* bn_init(const bn* Obj) {
 	}
 
 	bn* ptr_cbn = bn_new();
-	if (ptr_cbn == NULL) {
-		return NULL;
+	if (ptr_cbn == Obj) {
+		return ptr_cbn;
 	}
 
 	// Копирование значений полей структуры
@@ -177,7 +178,11 @@ int bn_init_int(bn* Obj, int num)
 	}
 
 	int num_c = abs(num);
-	int length = (int)(ceil(log10(num_c)) + 1);
+	int length = (int)ceil(log10(num_c)) + 2;
+	if (num_c != (int)pow(10.0, (double)length - 2.0))
+	{
+		--length;
+	}
 
 	char* str = (char*)malloc(length * sizeof(char));
 	if (str == NULL)
@@ -191,7 +196,7 @@ int bn_init_int(bn* Obj, int num)
 		str[i] = (num_c % 10) + '0';
 		num_c /= 10;
 	}
-	
+
 	int res_init = bn_init_string(Obj, str);
 	if (res_init != BN_OK)
 	{
@@ -488,8 +493,12 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 			bn* Obj_c = bn_new();
 			Obj_c->sign = 1;
 			Obj_c->ptr_body[0] = 1;
-
+			
 			int res_ass = Analog_assignment(Obj1, Obj_c);
+			if (res_ass != BN_OK)
+			{
+				return res_ass;
+			}
 			bn_delete(Obj_c);
 
 			return res_ass;
@@ -497,7 +506,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		else if (res_cmp == -1) // число Obj1 ближе к нулю
 		{
 			bn* Obj_c = bn_new();
-
+			
 			int res_ass = Analog_assignment(Obj1, Obj_c);
 			bn_delete(Obj_c);
 
@@ -505,9 +514,94 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		}
 		else // число Obj2 ближе к нулю
 		{
+			bn* Obj_r = bn_new(); // результат деления
+			Obj_r->size = Obj1->size;
+			Obj_r->ptr_body = bn_add_nulls(Obj_r->ptr_body, 1, Obj_r->size);
 
+			bn* Obj_cur = bn_new(); // текущий результат   
+			Obj_cur->sign = 1;
 
-			return BN_OK;
+			for (long int i = Obj1->size - 1; i >= 0; --i)
+			{
+				int res_sh = bn_shift(Obj_cur);
+				if (res_sh != BN_OK)
+				{
+					return res_sh;
+				}
+
+				Obj_cur->ptr_body[0] = Obj1->ptr_body[i];
+				int res_cl = Clean_Nulls(Obj_cur);
+				if (res_cl != BN_OK)
+				{
+					return res_cl;
+				}
+
+				int curr_num = 0; // текущее значение
+				if (bn_cmp(Obj_cur, Obj2) != -1) {
+					
+					unsigned int l_hold = 0, // левая граница диапазона значения искомой ячейки числа
+								 r_hold = NOTATION; // правая граница диапазона значения искомой ячейки числа 
+
+					while (l_hold <= r_hold)
+					{
+						int mid_now = (l_hold + r_hold) / 2;
+
+						bn* bn_cmp_obj = bn_new(); // большое число для сравнения
+						int res_init_int = bn_init_int(bn_cmp_obj, mid_now);
+						if (res_init_int != BN_OK)
+						{
+							return res_init_int;
+						}
+
+						int res_mul = bn_mul_to(bn_cmp_obj, Obj2);
+						if (res_mul != BN_OK)
+						{
+							return res_mul;
+						}
+
+						int res_cmp = bn_cmp(bn_cmp_obj, Obj_cur);
+						bn_delete(bn_cmp_obj);
+
+						if (res_cmp != 1)
+						{
+							curr_num = mid_now;
+							l_hold = mid_now + 1;
+						}
+						else
+						{
+							r_hold = mid_now - 1;
+						}
+					}
+				}
+
+				bn* Obj_sub = bn_new();
+				int res_init_int = bn_init_int(Obj_sub, curr_num);
+				if (res_init_int != BN_OK)
+				{
+					return res_init_int;
+				}
+				
+				int res_mul = bn_mul_to(Obj_sub, Obj2);
+				if (res_mul != BN_OK)
+				{
+					return res_mul;
+				}
+				
+				Obj_cur = bn_sub(Obj_cur, Obj_sub);
+				free(Obj_sub);
+				bn_print(Obj_cur);
+				Obj_r->ptr_body[i] = curr_num;
+			}
+			
+			//bn_delete(Obj_cur);
+			int res_cl = Clean_Nulls(Obj_r);
+			if (res_cl != BN_OK)
+			{
+				return res_cl;
+			}
+
+			int res_ass = Analog_assignment(Obj1, Obj_r);
+			return res_ass;
 		}
 	}
 	else // знаки не равны
@@ -522,6 +616,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		return BN_OK;
 	}
 }
+
 
 
 /* Функция для быстрого возведения в степень */
@@ -731,15 +826,6 @@ bn* bn_mul_col(bn* Obj1, bn const* Obj2)
 		bn* Obj_r = bn_new(); // возвращаем нулевой объект
 		return Obj_r;
 	}
-	if (Obj1->size == 1 && Obj1->sign != 0)
-	{
-		bn* Obj_c = bn_init(Obj2);
-		return Obj_c;
-	}
-	if (Obj2->size == 1 && Obj2->sign != 0)
-	{
-		return Obj1;
-	}
 
 	size_t maxsize = Obj1->size + Obj2->size;
 
@@ -768,7 +854,6 @@ bn* bn_mul_col(bn* Obj1, bn const* Obj2)
 	return Obj_r;
 }
 
-/* Функция для добавления нулей для приведения к четному размеру массива */
 int* bn_add_nulls(int* arr, size_t size, size_t num)
 {
 	if (arr == NULL)
@@ -855,6 +940,31 @@ int bn_abs_cmp(bn const* Obj1, bn const* Obj2)
 	}
 }
 
+int bn_shift(bn* Obj)
+{
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+
+	int* arr = (int*)realloc(Obj->ptr_body, (Obj->size + 1) * sizeof(int));
+	if (arr == NULL)
+	{
+		return BN_NO_MEMORY;
+	}
+	
+	Obj->ptr_body = arr;
+	++Obj->size;
+	Obj->ptr_body[Obj->size - 1] = 0;
+	for (size_t i = Obj->size - 1; i > 0; --i)
+	{
+		Obj->ptr_body[i] = Obj->ptr_body[i - 1];
+	}
+	Obj->ptr_body[0] = 0;
+
+	return BN_OK;
+}
+
 int bn_print(bn const* Obj)
 {
 	if (Obj == NULL)
@@ -886,8 +996,16 @@ int bn_print(bn const* Obj)
 int main()
 {
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "-6455474676555399");
+	bn_init_string(bn1, "64577667485738747");
+	bn_print(bn1);
+
+	bn* bn2 = bn_new();
+	bn_init_string(bn2, "64436");
+	bn_print(bn2);
+
+	int res = bn_div_to(bn1, bn2);
+
+	bn_print(bn1);
 
 	return 0;
 }
-
