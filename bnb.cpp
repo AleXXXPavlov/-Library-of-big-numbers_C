@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <math.h>
 #include <ctype.h>
+#include <locale.h>
 
 // ------------------------------------------ ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ----------------------------------------------------
 
@@ -16,6 +17,9 @@ int char_to_int(char);
 
 // Функция для умножения большого числа на число типа int
 int bn_mul_int(bn*, int);
+
+// Функция деления большого числа на int
+int bn_div_int(bn*, int);
 
 // Функция для прибавления к большому числу положительное число типа int
 int bn_add_to_abs_int(bn*, int);
@@ -710,10 +714,57 @@ int bn_pow_to(bn* Obj, int degree)
 }
 
 /* Функция для взятия корня большого числа */
-int bn_root_to(bn*, int)
+int bn_root_to(bn* Obj, int root)
 {
+	if (Obj != NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+	if (root < 1)
+	{
+		printf("\nПроверьте корректность передаваемых данных.\n");
+		return BN_OK;
+	}
+	if (root % 2 == 0 && Obj->sign == -1)
+	{
+		printf("\nОперация взятия такого корня из отрицательного числа невозможна.\n");
+		return BN_OK;
+	}
 
-	return BN_OK;
+	// Создаем объект, в котором будет получаться резульат, без выбора начального приближения
+	bn* Obj_r = bn_new();
+	Obj_r->sign = Obj->sign;
+	Obj_r->ptr_body[0] = 1;
+
+	bool indicator = false; // индикатор, сигнализирующий о начале "виляния" около требуемого результата
+	bn* Obj_curr = bn_new();
+
+	for (;;)
+	{
+		int res = bn_div_int(bn_add(Obj_curr, bn_div(Obj, Obj_r)), 2);
+		if (res != BN_OK)
+		{
+			return res;
+		}
+
+		if (bn_cmp(Obj_r, Obj_curr) == 0 || (bn_cmp(Obj_r, Obj_curr) == -1 && indicator))
+		{
+			break;
+		}
+
+		indicator = bn_cmp(Obj_r, Obj_curr);
+		int res_ass = Analog_assignment(Obj_r, Obj_curr);
+		if (res_ass != BN_OK)
+		{
+			return res_ass;
+		}
+	}
+	bn_delete(Obj_curr);
+
+	int res_ass = Analog_assignment(Obj, Obj_r);
+	bn_delete(Obj_r);
+
+	return res_ass;
 }
 
 /* Функция для суммы двух больших чисел */
@@ -773,6 +824,54 @@ bn* bn_mul(bn const* Obj1, bn const* Obj2)
 	return Obj_r;
 }
 
+/* Функиця для вычисления деления двух больших чисел */
+bn* bn_div(bn const* Obj1, bn const* Obj2)
+{
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return NULL;
+	}
+
+	bn* Obj_r = bn_init(Obj1);
+
+	int code = bn_div_to(Obj_r, Obj2);
+	if (code != BN_OK)
+	{
+		return NULL;
+	}
+
+	return Obj_r;
+}
+
+const char* bn_to_string(bn const* Obj, int radix)
+{
+	if (Obj == NULL)
+	{
+		return NULL;
+	}
+	if (radix <= 0)
+	{
+		printf("\nПроверьте корректность поставляемых данных.\n");
+		return NULL;
+	}
+	if (Obj->sign == 0)
+	{
+		char* check = (char*)malloc(2 * sizeof(char));
+		if (check == NULL)
+		{
+			return NULL;
+		}
+
+		char* str = check;
+		str[0] = '0';
+		str[1] = '\0';
+		return str;
+	}
+
+	//...
+	return NULL;
+}
+
 // -------------------------------------- ОПРЕДЕЛЕНИЯ ДОПОЛНИТЕЛЬНЫХ ФУНКЦИЙ -------------------------------------------
 int char_to_int(char character)
 {
@@ -780,7 +879,15 @@ int char_to_int(char character)
 	{
 		return character - '0';
 	}
-	return (int)character;
+	if (isupper(character))
+	{
+		return character - 'A';
+	}
+	if (islower(character))
+	{
+		return character - 'a';
+	}
+	return BN_OK;
 }
 
 int bn_mul_int(bn* Obj, int number)
@@ -847,6 +954,36 @@ int bn_add_to_abs_int(bn* Obj, int number)
 	bn_delete(Obj_add);
 
 	return BN_OK;
+}
+
+int bn_div_int(bn* Obj, int number)
+{
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+	if (number == 0)
+	{
+		return BN_DIVIDE_BY_ZERO;
+	}
+
+	if (number < 0)
+	{
+		number = abs(number);
+		bn_neg(Obj);
+	}
+
+	bn* Obj_num = bn_new();
+	int res_init = bn_init_int(Obj_num, number);
+	if (res_init != BN_OK)
+	{
+		return res_init;
+	}
+
+	int res_div = bn_div_to(Obj, Obj_num);
+	bn_delete(Obj_num);
+
+	return res_div;
 }
 
 int Analog_assignment(bn* Obj1, bn* Obj2)
@@ -1167,8 +1304,10 @@ int bn_print1(bn const* Obj)
 
 int main()
 {
+	setlocale(LC_ALL, "RUS");
+
 	bn* bn1 = bn_new();
-	int res = bn_init_string_radix(bn1, "43695785689345435", 17);
+	int res = bn_init_string_radix(bn1, "43695785689345435", -6);
 	bn_print(bn1);
 
 	return 0;
