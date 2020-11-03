@@ -673,6 +673,21 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 	return res_ass;
 }
 
+/* Функция для нахождения остатка от деления одного большого чилса на другое */
+int bn_mod_to(bn* Obj1, bn const* Obj2)
+{
+	bn* Obj1_c = bn_init(Obj1);
+	bn* Obj2_c = bn_init(Obj2);
+
+	bn_abs(Obj1_c);
+	bn_abs(Obj2_c);
+
+	int res_abs_cmp = bn_abs_cmp(Obj1_c, Obj2_c);
+
+	// ...
+	return BN_OK;
+}
+
 /* Функция для быстрого возведения в степень */
 int bn_pow_to(bn* Obj, int degree)
 {
@@ -861,6 +876,26 @@ bn* bn_div(bn const* Obj1, bn const* Obj2)
 	return Obj_r;
 }
 
+/* Функиця для вычисления остатка от деления двух больших чисел */
+bn* bn_mod(bn const* Obj1, bn const* Obj2)
+{
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return NULL;
+	}
+
+	bn* Obj_r = bn_init(Obj1);
+
+	int code = bn_mod_to(Obj_r, Obj2);
+	if (code != BN_OK)
+	{
+		return NULL;
+	}
+
+	return Obj_r;
+}
+
+/* Функция для предстваления BN в некоторой системе счисления radix в виде строки */
 const char* bn_to_string(bn const* Obj, int radix)
 {
 	if (Obj == NULL)
