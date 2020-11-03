@@ -1,3 +1,4 @@
+
 #include "bnb.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,10 +35,10 @@ int Sub_Abs(int*, int*, size_t, size_t);
 bn* bn_mul_col(bn*, bn const*);
 
 // Функция для добавления нулей для приведения к четному размеру массива
-int* bn_add_nulls(int*, size_t, size_t);
+int bn_add_nulls_begin(bn*, size_t);
 
 // Функция для удаления впереди идущих нулей большого числа
-int Clean_Nulls(bn*);
+int Clean_Nulls_Front(bn*);
 
 // Функция для удаления лишних нулей
 int Clean_Nulls_Back(bn*);
@@ -51,7 +52,7 @@ int bn_shift(bn*);
 // Функция для вывода структуры в консоль
 int bn_print(bn const*); 
 
-// Функия для вывода структуры, как она расопложена в памяти
+// Функия для вывода структуры, как она расположена в памяти
 int bn_print1(bn const*);
 
 // ------------------------------------------ КОНСТРУКТОРЫ / ДЕСТРУКТОР -----------------------------------------------------
@@ -62,7 +63,6 @@ struct bn_s {
 	size_t size; // размер массива
 	int sign; // знак числа
 };
-
 
 /* Конструктор */
 bn* bn_new() {
@@ -524,7 +524,6 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 /* Функция для умножения из одного большого числа другое */
 int bn_mul_to(bn* Obj1, bn const* Obj2)
 {
-
 	bn* Obj_c = bn_mul_col(Obj1, Obj2);
 	if (Obj_c == NULL)
 	{
@@ -556,10 +555,13 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 	bn_abs(Obj2_c); // делаем знак положительным
 
 	bn* Obj_r = bn_new(); // результат деления
-	Obj_r->ptr_body = bn_add_nulls(Obj_r->ptr_body, Obj_r->size, Obj1->size);
-	Obj_r->size = Obj1->size;
+	int res_add = bn_add_nulls_begin(Obj_r, Obj1->size); // добавление ведущих нулей для инициализации
+	if (res_add != BN_OK)
+	{
+		return res_add;
+	}
 
-	bn* Obj_cur = bn_new();
+	bn* Obj_cur = bn_new(); // текущее делимое
 	Obj_cur->sign = 1;
 
 	for (long int i = Obj1->size - 1; i >= 0; --i)
@@ -572,12 +574,12 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		
 		Obj_cur->ptr_body[0] = Obj1->ptr_body[i];
 
-		int res_cl = Clean_Nulls(Obj_cur);
+		int res_cl = Clean_Nulls_Front(Obj_cur); // случай для 1-ой итерации, а также, когда делимое кратно делителю, на следующей итерации
 		if (res_cl != BN_OK)
 		{
 			return res_cl;
 		}
-
+		
 		int curr_num = 0; // результат деления Obj_cur на делитель
 		unsigned int l_hold = 0, // левая граница диапазона значения искомой ячейки числа
 					 r_hold = NOTATION; // правая граница диапазона значения искомой ячейки числа 
@@ -612,43 +614,59 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 				{
 					r_hold = mid_now - 1;
 				}
-
 			}
-
+			
 			bn_delete(Obj_cmp);
 		}
 		
 		Obj_r->ptr_body[i] = curr_num;
 		
-		bn* Obj_sub = bn_new();
-		int res_init_int = bn_init_int(Obj_sub, curr_num);
-		if (res_init_int != BN_OK)
+		if (curr_num != 0) // если разделилось, то оставляем в Obj_cur остаток от деления
 		{
-			return res_init_int;
-		}
-		
-		
-		int res_mul = bn_mul_to(Obj_sub, Obj2_c);
-		if (res_mul != BN_OK)
-		{
-			return res_mul;
-		}
-		
-		Obj_cur = bn_sub(Obj_cur, Obj_sub);
-		bn_delete(Obj_sub);
-		
-	}
+			bn* Obj_sub = bn_new();
+			int res_init_int = bn_init_int(Obj_sub, curr_num);
+			if (res_init_int != BN_OK)
+			{
+				return res_init_int;
+			}
 
-	//bn_delete(Obj_cur); 
+			int res_mul = bn_mul_to(Obj_sub, Obj2_c);
+			if (res_mul != BN_OK)
+			{
+				return res_mul;
+			}
+
+			Obj_cur = bn_sub(Obj_cur, Obj_sub);
+			bn_delete(Obj_sub);
+			
+			int res_cl = Clean_Nulls_Front(Obj_cur);
+			if (res_cl != BN_OK)
+			{
+				return res_cl;
+			}
+		}
+	}
+	
+	bn_delete(Obj_cur); 
 	bn_delete(Obj2_c);
-	int res_cl = Clean_Nulls(Obj_r);
+
+	Obj_r->sign = Obj1->sign * Obj2->sign;
+
+	int res_cl = Clean_Nulls_Front(Obj_r);
 	if (res_cl != BN_OK)
 	{
 		return res_cl;
 	}
-
-	Obj_r->sign = Obj1->sign * Obj2->sign;
-	
+	if (Obj_r->ptr_body == NULL) // для случая, когда делимое меньше делителя 
+	{
+		bn_delete(Obj_r);
+		bn* Obj_null = bn_new();
+		
+		int res_ass =  Analog_assignment(Obj1, Obj_null);
+		bn_delete(Obj_null);
+		
+		return res_ass;
+	}
 
 	int res_ass = Analog_assignment(Obj1, Obj_r);
 	bn_delete(Obj_r);
@@ -716,7 +734,7 @@ int bn_pow_to(bn* Obj, int degree)
 /* Функция для взятия корня большого числа */
 int bn_root_to(bn* Obj, int root)
 {
-	if (Obj != NULL)
+	if (Obj == NULL)
 	{
 		return BN_NULL_OBJECT;
 	}
@@ -881,11 +899,11 @@ int char_to_int(char character)
 	}
 	if (isupper(character))
 	{
-		return character - 'A';
+		return character - 'A' + 10;
 	}
 	if (islower(character))
 	{
-		return character - 'a';
+		return character - 'a' + 10;
 	}
 	return BN_OK;
 }
@@ -1075,8 +1093,12 @@ bn* bn_mul_col(bn* Obj1, bn const* Obj2)
 	size_t maxsize = Obj1->size + Obj2->size;
 
 	bn* Obj_r = bn_new();
-	Obj_r->ptr_body = bn_add_nulls(Obj_r->ptr_body, Obj_r->size, maxsize); // добавление (maxsize - 1) нулей
-	Obj_r->size = maxsize;
+	int res_add = bn_add_nulls_begin(Obj_r, maxsize);
+	if (res_add != BN_OK)
+	{
+		return NULL;
+	}
+
 	Obj_r->sign = Obj1->sign * Obj2->sign;
 
 	for (size_t i = 0; i < Obj1->size; ++i)
@@ -1091,7 +1113,7 @@ bn* bn_mul_col(bn* Obj1, bn const* Obj2)
 		}
 	}
 	
-	int res_cl = Clean_Nulls(Obj_r);
+	int res_cl = Clean_Nulls_Front(Obj_r);
 	if (res_cl != BN_OK)
 	{
 		return NULL;
@@ -1100,29 +1122,41 @@ bn* bn_mul_col(bn* Obj1, bn const* Obj2)
 	return Obj_r;
 }
 
-int* bn_add_nulls(int* arr, size_t size, size_t num)
+int bn_add_nulls_begin(bn* Obj, size_t newsize)
 {
+	if (Obj == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
+	if (Obj->size > newsize)
+	{
+		return BN_NO_MEMORY;
+	}
+	if (Obj->size == newsize)
+	{
+		return BN_OK;
+	}
+	
+	int* arr = (int*)realloc(Obj->ptr_body, newsize * sizeof(int));
 	if (arr == NULL)
 	{
-		return NULL;
+		return BN_NO_MEMORY;
 	}
-
-	int* arr_copy = (int*)calloc(num, sizeof(int));
-	if (arr_copy == NULL)
+	else
 	{
-		return NULL;
-	}
+		Obj->ptr_body = arr;
 
-	for (size_t i = 0; i < size; ++i)
-	{
-		arr_copy[i] = arr[i];
-	}
+		for (size_t i = Obj->size; i < newsize; ++i)
+		{
+			Obj->ptr_body[i] = 0;
+		}
 
-	free(arr);
-	return arr_copy;
+		Obj->size = newsize;
+		return BN_OK;
+	}
 }
 
-int Clean_Nulls(bn* Obj)
+int Clean_Nulls_Front(bn* Obj)
 {
 	if (Obj == NULL)
 	{
@@ -1132,16 +1166,29 @@ int Clean_Nulls(bn* Obj)
 	size_t i = Obj->size - 1;
 	for (; Obj->ptr_body[i] == 0; --i);
 
-	int* arr = (int*)realloc(Obj->ptr_body, (i + 1) * sizeof(int));
+	if (i + 1 == 0)
+	{
+		free(Obj->ptr_body);
+		Obj->ptr_body = (int*)calloc(1, sizeof(int));
+
+		Obj->size = 1;
+		Obj->sign = 0;
+		return BN_OK;;
+	}
+	
+	int* arr = (int*)calloc((i+1), sizeof(int));
 	if (arr == NULL)
 	{
 		return BN_NO_MEMORY;
 	}
-	else
+	
+	for (size_t j = 0; j < i + 1; ++j)
 	{
-		Obj->ptr_body = arr;
-		Obj->size = i + 1;
+		arr[j] = Obj->ptr_body[j];
 	}
+
+	Obj->ptr_body = arr;
+	Obj->size = i + 1;
 
 	return BN_OK;
 }
@@ -1229,11 +1276,10 @@ int bn_shift(bn* Obj)
 		return BN_NO_MEMORY;
 	}
 
+	arr[Obj->size] = 0;
 	++Obj->size;
-	Obj->ptr_body = (int*)malloc(Obj->size );
 	Obj->ptr_body = arr;
 	
-
 	for (size_t i = Obj->size - 1; i > 0; --i)
 	{
 		Obj->ptr_body[i] = Obj->ptr_body[i - 1];
@@ -1255,7 +1301,7 @@ int bn_print(bn const* Obj)
 	for (int i = Obj->size - 1; i != -1; --i) {
 		if (i != Obj->size - 1 && Obj->ptr_body[i] != 0)
 		{
-			int el_size = (int)ceil(log10(Obj->ptr_body[i])) + 1;
+			int el_size = (int)ceil(log10(Obj->ptr_body[i]));
 			if ((el_size < NUM))
 			{
 				for (int j = 0; j < NUM - el_size; ++j)
@@ -1269,7 +1315,11 @@ int bn_print(bn const* Obj)
 		{
 			printf("%d", Obj->ptr_body[i]);
 		}
-		else
+		else if (i == 0 && Obj->ptr_body[i] == 0)
+		{
+			printf("%d", 0);
+		}
+		else // i != 0 && i != Obj->size - 1 && Obj->ptr_body[i] = 0
 		{
 			for (int i = 0; i < NUM; ++i)
 			{
@@ -1307,8 +1357,20 @@ int main()
 	setlocale(LC_ALL, "RUS");
 
 	bn* bn1 = bn_new();
-	int res = bn_init_string_radix(bn1, "43695785689345435", -6);
+	bn_init_string(bn1, "75674575658874657568475965687596747654784645у436756");
 	bn_print(bn1);
+	//bn_print1(bn1);
 
+	bn* bn2 = bn_new();
+	bn_init_string(bn2, "94365465757856");
+	//bn_print1(bn2);
+	bn_print(bn2);
+
+	int res_div = bn_div_to(bn1, bn2);
+	bn_print(bn1);
+	bn_print1(bn1);
+
+	printf("\n\n%d\n\n", res_div);
+	
 	return 0;
 }
