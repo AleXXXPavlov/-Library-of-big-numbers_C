@@ -571,7 +571,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		{
 			return res_sh;
 		}
-		
+
 		Obj_cur->ptr_body[0] = Obj1->ptr_body[i];
 
 		int res_cl = Clean_Nulls_Front(Obj_cur); // случай для 1-ой итерации, а также, когда делимое кратно делителю, на следующей итерации
@@ -635,8 +635,12 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 			{
 				return res_mul;
 			}
-
-			Obj_cur = bn_sub(Obj_cur, Obj_sub);
+			
+			int res_sb = bn_sub_to(Obj_cur, Obj_sub);
+			if (res_sb != BN_OK)
+			{
+				return res_mul;
+			}
 			bn_delete(Obj_sub);
 			
 			int res_cl = Clean_Nulls_Front(Obj_cur);
@@ -645,6 +649,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 				return res_cl;
 			}
 		}
+		
 	}
 	
 	bn_delete(Obj_cur); 
@@ -1331,7 +1336,7 @@ int bn_print(bn const* Obj)
 	}
 
 	printf("-----------------------------------------------------------\n");
-	printf("Sign = %d\nLength = %d\nAbsolute value = ", Obj->sign, Obj->size);
+	printf("Sign = %d\nLength = %ld\nAbsolute value = ", Obj->sign, Obj->size);
 
 	for (int i = Obj->size - 1; i != -1; --i) {
 		if (i != Obj->size - 1 && Obj->ptr_body[i] != 0)
@@ -1375,7 +1380,7 @@ int bn_print1(bn const* Obj)
 	}
 
 	printf("-----------------------------------------------------------\n");
-	printf("Sign = %d\nLength = %d\nAbsolute value = ", Obj->sign, Obj->size);
+	printf("Sign = %d\nLength = %ld\nAbsolute value = ", Obj->sign, Obj->size);
 
 	for (int i = 0; i != Obj->size; ++i) {
 		printf(" \\ %d \\ ", Obj->ptr_body[i]);
@@ -1392,8 +1397,8 @@ int main()
 	setlocale(LC_ALL, "RUS");
 
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "75674575658874657568475965687596747654784645у436756");
-	bn_print(bn1);
+	bn_init_string(bn1, "756764536786754565653465788646758646746754754564775675654567564654353564345347654564676564564767");
+	bn_print1(bn1);
 	//bn_print1(bn1);
 
 	bn* bn2 = bn_new();
