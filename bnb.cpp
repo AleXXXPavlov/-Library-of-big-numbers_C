@@ -485,12 +485,12 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 	if (Obj1->sign == Obj2->sign)
 	{
 		int param_res = bn_cmp(Obj1, Obj2);
-
-		if ((param_res * Obj1->sign) == 1)  // |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = -1
+		
+		if (param_res == 1)  // |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = -1
 		{
 			return Sub_Abs(Obj1->ptr_body, Obj2->ptr_body, Obj1->size, Obj2->size);
 		}
-		else if ((param_res * Obj1->sign) == -1) // |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = -1
+		else if (param_res == -1) // |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = -1
 		{
 			bn* Obj_c = bn_init(Obj2);
 
@@ -649,13 +649,26 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 				return res_cl;
 			}
 		}
-		
 	}
 	
+	Obj_r->sign = Obj1->sign * Obj2->sign;
+	if (Obj_cur->sign != 0 && Obj_r->sign == -1)
+	{
+		bn* Obj_ed = bn_new();
+		Obj_ed->sign = 1;
+		Obj_ed->ptr_body[0] = 1;
+
+		int res_sub = bn_sub_to(Obj_r, Obj_ed);
+		bn_delete(Obj_ed);
+
+		if (res_sub != BN_OK)
+		{
+			return res_sub;
+		}
+	}
+
 	bn_delete(Obj_cur); 
 	bn_delete(Obj2_c);
-
-	Obj_r->sign = Obj1->sign * Obj2->sign;
 
 	int res_cl = Clean_Nulls_Front(Obj_r);
 	if (res_cl != BN_OK)
@@ -678,19 +691,52 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 	return res_ass;
 }
 
-/* Функция для нахождения остатка от деления одного большого чилса на другое */
+/* Функция для взятие остатка числа */
 int bn_mod_to(bn* Obj1, bn const* Obj2)
 {
-	bn* Obj1_c = bn_init(Obj1);
-	bn* Obj2_c = bn_init(Obj2);
+	if (Obj1 == NULL || Obj2 == NULL)
+	{
+		return BN_NULL_OBJECT;
+	}
 
-	bn_abs(Obj1_c);
-	bn_abs(Obj2_c);
+	if (Obj2->sign == 0)
+	{
+		return BN_DIVIDE_BY_ZERO;
+	}
+	if (Obj1->sign == 0)
+	{
+		return BN_OK;
+	}
 
-	int res_abs_cmp = bn_abs_cmp(Obj1_c, Obj2_c);
+	bn* Obj_c = bn_init(Obj1);
+	
+	int res_err = bn_div_to(Obj_c, Obj2);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+	
+	res_err = bn_mul_to(Obj_c, Obj2);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+	
+	res_err = bn_sub_to(Obj1, Obj_c);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+	
+	res_err = Clean_Nulls_Front(Obj1);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
 
-	// ...
-	return BN_OK;
+	bn_delete(Obj_c);
+
+	return res_err;
 }
 
 /* Функция для быстрого возведения в степень */
@@ -1397,20 +1443,14 @@ int main()
 	setlocale(LC_ALL, "RUS");
 
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "756764536786754565653465788646758646746754754564775675654567564654353564345347654564676564564767");
-	bn_print1(bn1);
+	bn_init_string(bn1, "17");
 	//bn_print1(bn1);
+	bn_print(bn1);
 
 	bn* bn2 = bn_new();
-	bn_init_string(bn2, "94365465757856");
+	bn_init_string(bn2, "10");
 	//bn_print1(bn2);
 	bn_print(bn2);
 
-	int res_div = bn_div_to(bn1, bn2);
-	bn_print(bn1);
-	bn_print1(bn1);
-
-	printf("\n\n%d\n\n", res_div);
-	
 	return 0;
 }
