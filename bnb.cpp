@@ -965,16 +965,15 @@ const char* bn_to_string(bn const* Obj, int radix)
 	}
 	if (Obj->sign == 0)
 	{
-		char* check = (char*)malloc(2 * sizeof(char));
-		if (check == NULL)
+		char* str_r = (char*)malloc(2 * sizeof(char));
+		if (str_r == NULL)
 		{
 			return NULL;
 		}
 
-		char* str = check;
-		str[0] = '0';
-		str[1] = '\0';
-		return str;
+		str_r[0] = '0';
+		str_r[1] = '\0';
+		return str_r;
 	}
 	
 	bn* Obj_rad = bn_new();
@@ -983,14 +982,16 @@ const char* bn_to_string(bn const* Obj, int radix)
 	{
 		return NULL;
 	}
-
+	
 	bn* Obj_c = bn_init(Obj);
+	bn_abs(Obj_c);
+
 	char* str = (char*)malloc((Obj->size * NUM + 1) * sizeof(char));
 	str[Obj->size * NUM] = '\0';
 
 	size_t i = 0;
 	int res_mod;
-
+	
 	while (Obj_c->sign != 0)
 	{
 		bn* Obj_mod = bn_mod(Obj_c, Obj_rad);
@@ -1016,12 +1017,34 @@ const char* bn_to_string(bn const* Obj, int radix)
 	bn_delete(Obj_rad);
 	bn_delete(Obj_c);
 	
-	char* str_r = (char*)malloc(i * sizeof(char));
+	char* str_r;
 	size_t k = 0;
+
+	if (Obj->sign == -1)
+	{
+		str_r = (char*)malloc((i + 1) * sizeof(char));
+		if (str_r == NULL)
+		{
+			free(str);
+			return NULL;
+		}
+		str_r[k++] = '-';
+	}
+	else
+	{
+		str_r = (char*)malloc(i * sizeof(char));
+		if (str_r == NULL)
+		{
+			free(str);
+			return NULL;
+		}
+	}
+
 	for (size_t j = Obj->size * NUM - i; j < Obj->size * NUM + 1; ++j, ++k)
 	{
 		str_r[k] = str[j];
 	}
+
 
 	free(str);
 
@@ -1504,7 +1527,7 @@ int main()
 	setlocale(LC_ALL, "RUS");
 
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "17453798462376873583");
+	bn_init_string(bn1, "-17453798462376873583");
 	//bn_print1(bn1);
 	bn_print(bn1);
 
@@ -1518,3 +1541,4 @@ int main()
 
 	return 0;
 }
+
