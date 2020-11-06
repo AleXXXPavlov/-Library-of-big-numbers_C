@@ -32,7 +32,7 @@ int bn_add_to_abs_int(bn*, int);
 int Analog_assignment(bn*, bn*);
 
 // Функция для нахождения расстояние между асолютными значениями чисел
-int Sub_Abs(int*, int*, size_t, size_t);
+int Sub_Abs(bn*, bn const*);
 
 // Функция для нахождения произведения двух чисел школьным методом
 bn* bn_mul_col(bn*, bn const*);
@@ -494,18 +494,23 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 		
 		if (param_res == 1)  // |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = -1
 		{
-			return Sub_Abs(Obj1->ptr_body, Obj2->ptr_body, Obj1->size, Obj2->size);
+			return Sub_Abs(Obj1, Obj2);
 		}
 		else if (param_res == -1) // |Obj1| < |Obj2| and Obj1->sign = Obj2->sign = 1 || |Obj1| > |Obj2| and Obj1->sign = Obj2->sign = -1
 		{
 			bn* Obj_c = bn_init(Obj2);
 
-			int result = Sub_Abs(Obj_c->ptr_body, Obj1->ptr_body, Obj_c->size, Obj1->size);
-			Analog_assignment(Obj1, Obj_c);
-			bn_neg(Obj1);
+			int res_err = Sub_Abs(Obj_c, Obj1);
+			if (res_err != BN_OK)
+			{
+				return res_err;
+			}
 
+			res_err = Analog_assignment(Obj1, Obj_c);
+			bn_neg(Obj1);
 			bn_delete(Obj_c);
-			return result;
+			
+			return res_err;
 		}
 		else // param_res == 0
 		{
@@ -820,40 +825,84 @@ int bn_root_to(bn* Obj, int root)
 		return BN_OK;
 	}
 
-	// Создаем объект, в котором будет получаться резульат, без выбора начального приближения
-	bn* Obj_r = bn_new();
-	Obj_r->sign = Obj->sign;
-	Obj_r->ptr_body[0] = 1;
+	// Создаем объект, в котором будет получаться результат
+	bn* Obj_r = bn_init(Obj);
 
-	bool indicator = false; // индикатор, сигнализирующий о начале "виляния" около требуемого результата
-	bn* Obj_curr = bn_new();
+	bn* Obj_ed = bn_new();
+	Obj_ed->sign = 1;
+	Obj_ed->ptr_body[0] = 1;
 
+	int res_err = bn_div_int(Obj_r, root); // начальное приближение
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+
+	bn* Obj_curr = bn_init(Obj); 
+
+	bn* Obj_root = bn_new();
+	res_err = bn_init_int(Obj_root, root - 1);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+	
 	for (;;)
 	{
-		int res = bn_div_int(bn_add(Obj_curr, bn_div(Obj, Obj_r)), 2);
-		if (res != BN_OK)
+		res_err = Analog_assignment(Obj_curr, Obj);
+		if (res_err != BN_OK)
 		{
-			return res;
+			return res_err;
+		}
+		
+		res_err = bn_div_to(Obj_curr, bn_mul(Obj_r, Obj_root));
+		if (res_err != BN_OK)
+		{
+			return res_err;
+		}
+		
+		res_err = bn_add_to(Obj_r, Obj_curr);
+		if (res_err != BN_OK)
+		{
+			return res_err;
+		}
+		
+		res_err = bn_div_int(Obj_r, 2);
+		if (res_err != BN_OK)
+		{
+			return res_err;
 		}
 
-		if (bn_cmp(Obj_r, Obj_curr) == 0 || (bn_cmp(Obj_r, Obj_curr) == -1 && indicator))
+		bn* Obj_sub = bn_init(Obj_curr);
+		res_err = bn_sub_to(Obj_sub, Obj_r);
+		if (res_err != BN_OK)
+		{
+			return res_err;
+		}
+		bn_abs(Obj_sub);
+		
+		res_err = Clean_Nulls_Front(Obj_sub);
+		if (res_err != BN_OK)
+		{
+			return res_err;
+		}
+
+		int res_cmp = bn_cmp(Obj_sub, Obj_ed);
+		bn_delete(Obj_sub);
+
+		if (res_cmp != 1)
 		{
 			break;
 		}
-
-		indicator = bn_cmp(Obj_r, Obj_curr);
-		int res_ass = Analog_assignment(Obj_r, Obj_curr);
-		if (res_ass != BN_OK)
-		{
-			return res_ass;
-		}
 	}
+	
 	bn_delete(Obj_curr);
+	bn_delete(Obj_ed);
 
-	int res_ass = Analog_assignment(Obj, Obj_r);
+	res_err = Analog_assignment(Obj, Obj_r);
 	bn_delete(Obj_r);
-
-	return res_ass;
+	
+	return res_err;
 }
 
 /* Функция для суммы двух больших чисел */
@@ -990,7 +1039,6 @@ const char* bn_to_string(bn const* Obj, int radix)
 	str[Obj->size * NUM] = '\0';
 
 	size_t i = 0;
-	int res_mod;
 	
 	while (Obj_c->sign != 0)
 	{
@@ -1204,8 +1252,8 @@ int Analog_assignment(bn* Obj1, bn* Obj2)
 }
 
 /* Функция для разности двух модулей */
-int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
-	if (ptr_body1 == NULL || ptr_body2 == NULL)
+int Sub_Abs(bn* Obj1, bn const* Obj2) {
+	if (Obj1 == NULL || Obj2 == NULL)
 	{
 		return BN_NO_MEMORY;
 	}
@@ -1213,37 +1261,17 @@ int Sub_Abs(int* ptr_body1, int* ptr_body2, size_t size1, size_t size2) {
 	int flag = 0; // параметр, сигнализирующий, о получении слишком маленького числа в ячейке
 	size_t i = 0;
 
-	for (; i < size1 || flag != 0; ++i) {
-		ptr_body1[i] -= flag + (i < size2 ? ptr_body2[i] : 0);
-		flag = ptr_body1[i] < 0;
+	for (; i < Obj1->size || flag != 0; ++i) {
+		Obj1->ptr_body[i] -= flag + (i < Obj2->size ? Obj2->ptr_body[i] : 0);
+		flag = Obj1->ptr_body[i] < 0;
 
 		if (flag != 0)
 		{
-			ptr_body1[i] += NOTATION;
+			Obj1->ptr_body[i] += NOTATION;
 		}
 	}
 
-	int count_zero = 0;
-	if (ptr_body1[size1 - 1 - count_zero] == 0)
-	{
-		while (ptr_body1[size1 - 1 - count_zero] == 0)
-		{
-			++count_zero;
-		}
-
-		int* arr = (int*)realloc(ptr_body1, (size1 - count_zero) * sizeof(int));
-		if (arr == NULL)
-		{
-			return BN_NO_MEMORY;
-		}
-		else
-		{
-			ptr_body1 = arr;
-		}
-	}
-	size1 -= count_zero;;
-
-	return BN_OK;
+	return Clean_Nulls_Front(Obj1);
 }
 
 /* Функция для школьного перемножения */
@@ -1527,17 +1555,14 @@ int main()
 	setlocale(LC_ALL, "RUS");
 
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "-17453798462376873583");
+	bn_init_string(bn1, "17453798462376873585");
 	//bn_print1(bn1);
 	bn_print(bn1);
 
-	//bn* bn2 = bn_new();
-	//bn_init_string(bn2, "10");
+	bn* bn2 = bn_new();
+	bn_init_string(bn2, "17453798462376873584");
 	//bn_print1(bn2);
-	//bn_print(bn2);
-
-	const char* str = bn_to_string(bn1, 8);
-	printf("\n%s\n", str);
+	bn_print(bn2);
 
 	return 0;
 }
