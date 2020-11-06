@@ -16,6 +16,9 @@ int NUM = 9; // максимальное количество цифр в люб
 // Функция для преобразования символа в цифру
 int char_to_int(char);
 
+// Функция для преобразования числа в символ
+char int_to_char(int);
+
 // Функция для умножения большого числа на число типа int
 int bn_mul_int(bn*, int);
 
@@ -68,7 +71,8 @@ struct bn_s {
 bn* bn_new() {
 	bn* ptr_bn = (bn*)malloc(sizeof(bn)); // выделем место под структуру
 
-	if (ptr_bn == NULL) {
+	if (ptr_bn == NULL)
+	{
 		return NULL;
 	}
 
@@ -77,10 +81,12 @@ bn* bn_new() {
 	ptr_bn->sign = 0;
 	ptr_bn->ptr_body = (int*)calloc(ptr_bn->size, sizeof(int));
 
-	if (ptr_bn->ptr_body == NULL) {
+	if (ptr_bn->ptr_body == NULL) 
+	{
 		free(ptr_bn);
 		return NULL;
 	}
+
 	return ptr_bn;
 }
 
@@ -504,8 +510,8 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 		else // param_res == 0
 		{
 			bn* bn_null = bn_new();
-			Obj1 = bn_init(bn_null);
-			return BN_OK;
+			int res_ass = Analog_assignment(Obj1, bn_null);
+			return res_ass;
 		}
 	}
 	else // разные знаки
@@ -562,7 +568,6 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 	}
 
 	bn* Obj_cur = bn_new(); // текущее делимое
-	Obj_cur->sign = 1;
 
 	for (long int i = Obj1->size - 1; i >= 0; --i)
 	{
@@ -573,7 +578,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		}
 
 		Obj_cur->ptr_body[0] = Obj1->ptr_body[i];
-
+		Obj_cur->sign = 1;
 		int res_cl = Clean_Nulls_Front(Obj_cur); // случай для 1-ой итерации, а также, когда делимое кратно делителю, на следующей итерации
 		if (res_cl != BN_OK)
 		{
@@ -621,7 +626,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		
 		Obj_r->ptr_body[i] = curr_num;
 		
-		if (curr_num != 0) // если разделилось, то оставляем в Obj_cur остаток от деления
+		if (curr_num != 0)
 		{
 			bn* Obj_sub = bn_new();
 			int res_init_int = bn_init_int(Obj_sub, curr_num);
@@ -936,7 +941,7 @@ bn* bn_mod(bn const* Obj1, bn const* Obj2)
 	}
 
 	bn* Obj_r = bn_init(Obj1);
-
+	
 	int code = bn_mod_to(Obj_r, Obj2);
 	if (code != BN_OK)
 	{
@@ -971,9 +976,56 @@ const char* bn_to_string(bn const* Obj, int radix)
 		str[1] = '\0';
 		return str;
 	}
+	
+	bn* Obj_rad = bn_new();
+	int res_err = bn_init_int(Obj_rad, radix);
+	if (res_err != BN_OK)
+	{
+		return NULL;
+	}
 
-	//...
-	return NULL;
+	bn* Obj_c = bn_init(Obj);
+	char* str = (char*)malloc((Obj->size * NUM + 1) * sizeof(char));
+	str[Obj->size * NUM] = '\0';
+
+	size_t i = 0;
+	int res_mod;
+
+	while (Obj_c->sign != 0)
+	{
+		bn* Obj_mod = bn_mod(Obj_c, Obj_rad);
+		
+		if (Obj_mod == NULL) 
+		{
+			bn_delete(Obj_c);
+			bn_delete(Obj_rad);
+			return NULL;
+		}
+
+		str[Obj->size * NUM - (i++) - 1] = int_to_char(Obj_mod->ptr_body[0]);
+
+		res_err = bn_div_to(Obj_c, Obj_rad);
+		if (res_err != BN_OK)
+		{
+			return NULL;
+		}
+
+		bn_delete(Obj_mod);
+	}
+	
+	bn_delete(Obj_rad);
+	bn_delete(Obj_c);
+	
+	char* str_r = (char*)malloc(i * sizeof(char));
+	size_t k = 0;
+	for (size_t j = Obj->size * NUM - i; j < Obj->size * NUM + 1; ++j, ++k)
+	{
+		str_r[k] = str[j];
+	}
+
+	free(str);
+
+	return str_r;
 }
 
 // -------------------------------------- ОПРЕДЕЛЕНИЯ ДОПОЛНИТЕЛЬНЫХ ФУНКЦИЙ -------------------------------------------
@@ -994,6 +1046,14 @@ int char_to_int(char character)
 	return BN_OK;
 }
 
+char int_to_char(int number)
+{
+	if (number < 10)
+	{
+		return number + '0';
+	}
+	return number + 'A' - 10;
+}
 int bn_mul_int(bn* Obj, int number)
 {
 	if (Obj == NULL)
@@ -1374,6 +1434,7 @@ int bn_shift(bn* Obj)
 
 	return BN_OK;
 }
+
 int bn_print(bn const* Obj)
 {
 	if (Obj == NULL)
@@ -1443,14 +1504,17 @@ int main()
 	setlocale(LC_ALL, "RUS");
 
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "17");
+	bn_init_string(bn1, "17453798462376873583");
 	//bn_print1(bn1);
 	bn_print(bn1);
 
-	bn* bn2 = bn_new();
-	bn_init_string(bn2, "10");
+	//bn* bn2 = bn_new();
+	//bn_init_string(bn2, "10");
 	//bn_print1(bn2);
-	bn_print(bn2);
+	//bn_print(bn2);
+
+	const char* str = bn_to_string(bn1, 8);
+	printf("\n%s\n", str);
 
 	return 0;
 }
