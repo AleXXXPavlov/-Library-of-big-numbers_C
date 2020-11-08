@@ -7,6 +7,7 @@
 #include <math.h>
 #include <ctype.h>
 #include <locale.h>
+#include <time.h>
 
 // ------------------------------------------ ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ----------------------------------------------------
 
@@ -37,6 +38,9 @@ int Sub_Abs(bn*, bn const*);
 // Функция для нахождения произведения двух чисел школьным методом
 bn* bn_mul_col(bn*, bn const*);
 
+// Функиця для вычисления степени большого числа
+bn* bn_pow(bn const*, int);
+
 // Функция для добавления нулей для приведения к четному размеру массива
 int bn_add_nulls_begin(bn*, size_t);
 
@@ -49,8 +53,8 @@ int Clean_Nulls_Back(bn*);
 // Функция для сравнивания чисел с одинаковым знаком
 int bn_abs_cmp(bn const*, bn const*);
 
-// Функция для сдвига числа вправо c увеличением размера
-int bn_shift(bn*);
+// Функция для побитового сдвига числа вправо
+int bn_shift_right(bn*);
 
 // Функция для вывода структуры в консоль
 int bn_print(bn const*); 
@@ -576,7 +580,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 
 	for (long int i = Obj1->size - 1; i >= 0; --i)
 	{
-		int res_sh = bn_shift(Obj_cur);
+		int res_sh = bn_shift_right(Obj_cur);
 		if (res_sh != BN_OK)
 		{
 			return res_sh;
@@ -584,11 +588,6 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 
 		Obj_cur->ptr_body[0] = Obj1->ptr_body[i];
 		Obj_cur->sign = 1;
-		int res_cl = Clean_Nulls_Front(Obj_cur); // случай для 1-ой итерации, а также, когда делимое кратно делителю, на следующей итерации
-		if (res_cl != BN_OK)
-		{
-			return res_cl;
-		}
 		
 		int curr_num = 0; // результат деления Obj_cur на делитель
 		unsigned int l_hold = 0, // левая граница диапазона значения искомой ячейки числа
@@ -652,12 +651,6 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 				return res_mul;
 			}
 			bn_delete(Obj_sub);
-			
-			int res_cl = Clean_Nulls_Front(Obj_cur);
-			if (res_cl != BN_OK)
-			{
-				return res_cl;
-			}
 		}
 	}
 	
@@ -819,89 +812,99 @@ int bn_root_to(bn* Obj, int root)
 		printf("\nПроверьте корректность передаваемых данных.\n");
 		return BN_OK;
 	}
+	if (Obj->sign == 0)
+	{
+		return BN_OK;
+	}
 	if (root % 2 == 0 && Obj->sign == -1)
 	{
 		printf("\nОперация взятия такого корня из отрицательного числа невозможна.\n");
 		return BN_OK;
 	}
+	
+	if (Obj->size == 1)
+	{
+		bn* Obj_r = bn_new();
+		int res_err = bn_init_int(Obj_r, pow(Obj->ptr_body[0], 1 / (double)root));
+		if (res_err != BN_OK)
+		{
+			return res_err;
+		}
+		Obj_r->sign = Obj->sign;
+		
+		res_err = Analog_assignment(Obj, Obj_r);
+		bn_delete(Obj_r);
 
-	// Создаем объект, в котором будет получаться результат
-	bn* Obj_r = bn_init(Obj);
+		return res_err;
+	}
+
+	bn* Obj_r = bn_new();
+	Obj_r->sign = 1;
+	Obj_r->ptr_body[0] = 1;
+
+	bn* Obj_root = bn_new();
+	int res_err = bn_init_int(Obj_root, root);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+
+	bn* Obj_c = bn_init(Obj);
+	res_err = bn_abs(Obj_c);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+
+	bool ind_r = false;
+
+	for (;;)
+	{
+		bn* Obj_curr = bn_init(Obj_r);
+
+		res_err = bn_sub_to(Obj_curr, bn_div(bn_sub(bn_pow(Obj_r, root), Obj_c), bn_mul(Obj_root, bn_pow(Obj_r, root-1))));
+		if (res_err != BN_OK)
+		{
+			return res_err;
+		}
+		
+		if (bn_cmp(Obj_r, Obj_curr) == 0 || (bn_cmp(Obj_r, Obj_curr) < 0 && ind_r))
+		{
+			break;
+		}
+
+		ind_r = bn_cmp(Obj_r, Obj_curr);
+
+		res_err = Analog_assignment(Obj_r, Obj_curr);
+		if (res_err != BN_OK)
+		{
+			return res_err;
+		}
+
+		bn_delete(Obj_curr);
+	}
 
 	bn* Obj_ed = bn_new();
 	Obj_ed->sign = 1;
 	Obj_ed->ptr_body[0] = 1;
 
-	int res_err = bn_div_int(Obj_r, root); // начальное приближение
-	if (res_err != BN_OK)
+	while (bn_cmp(bn_pow(Obj_r, root), Obj_c) == 1)
 	{
-		return res_err;
+		res_err = bn_sub_to(Obj_r, Obj_ed);
+		if (res_err != BN_OK)
+		{
+			bn_delete(Obj_ed);
+			return res_err;
+		}
 	}
 
-	bn* Obj_curr = bn_init(Obj); 
-
-	bn* Obj_root = bn_new();
-	res_err = bn_init_int(Obj_root, root - 1);
-	if (res_err != BN_OK)
-	{
-		return res_err;
-	}
-	
-	for (;;)
-	{
-		res_err = Analog_assignment(Obj_curr, Obj);
-		if (res_err != BN_OK)
-		{
-			return res_err;
-		}
-		
-		res_err = bn_div_to(Obj_curr, bn_mul(Obj_r, Obj_root));
-		if (res_err != BN_OK)
-		{
-			return res_err;
-		}
-		
-		res_err = bn_add_to(Obj_r, Obj_curr);
-		if (res_err != BN_OK)
-		{
-			return res_err;
-		}
-		
-		res_err = bn_div_int(Obj_r, 2);
-		if (res_err != BN_OK)
-		{
-			return res_err;
-		}
-
-		bn* Obj_sub = bn_init(Obj_curr);
-		res_err = bn_sub_to(Obj_sub, Obj_r);
-		if (res_err != BN_OK)
-		{
-			return res_err;
-		}
-		bn_abs(Obj_sub);
-		
-		res_err = Clean_Nulls_Front(Obj_sub);
-		if (res_err != BN_OK)
-		{
-			return res_err;
-		}
-
-		int res_cmp = bn_cmp(Obj_sub, Obj_ed);
-		bn_delete(Obj_sub);
-
-		if (res_cmp != 1)
-		{
-			break;
-		}
-	}
-	
-	bn_delete(Obj_curr);
 	bn_delete(Obj_ed);
+	bn_delete(Obj_c);
 
+	Obj_r->sign = Obj->sign;
 	res_err = Analog_assignment(Obj, Obj_r);
 	bn_delete(Obj_r);
-	
+
 	return res_err;
 }
 
@@ -1319,6 +1322,24 @@ bn* bn_mul_col(bn* Obj1, bn const* Obj2)
 	return Obj_r;
 }
 
+bn* bn_pow(bn const* Obj, int degree)
+{
+	if (Obj == NULL)
+	{
+		return NULL;
+	}
+
+	bn* Obj_r = bn_init(Obj);
+
+	int code = bn_pow_to(Obj_r, degree);
+	if (code != BN_OK)
+	{
+		return NULL;
+	}
+
+	return Obj_r;
+}
+
 int bn_add_nulls_begin(bn* Obj, size_t newsize)
 {
 	if (Obj == NULL)
@@ -1460,7 +1481,7 @@ int bn_abs_cmp(bn const* Obj1, bn const* Obj2)
 	}
 }
 
-int bn_shift(bn* Obj)
+int bn_shift_right(bn* Obj)
 {
 	if (Obj == NULL)
 	{
@@ -1482,6 +1503,21 @@ int bn_shift(bn* Obj)
 		Obj->ptr_body[i] = Obj->ptr_body[i - 1];
 	}
 	Obj->ptr_body[0] = 0;
+
+	int res_err = Clean_Nulls_Front(Obj);
+	if (res_err != BN_OK)
+	{
+		return res_err;
+	}
+
+	if (Obj == NULL)
+	{
+		bn* Obj_null = bn_new();
+		res_err = Analog_assignment(Obj, Obj_null);
+		bn_delete(Obj_null);
+
+		return res_err;
+	}
 
 	return BN_OK;
 }
@@ -1555,15 +1591,17 @@ int main()
 	setlocale(LC_ALL, "RUS");
 
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "17453798462376873585");
-	//bn_print1(bn1);
+	bn_init_string(bn1, "5647589345883495834568934583495834725687345438573458745468593568370160457");
 	bn_print(bn1);
 
-	bn* bn2 = bn_new();
-	bn_init_string(bn2, "17453798462376873584");
-	//bn_print1(bn2);
-	bn_print(bn2);
+	unsigned int start = clock();
+	int res = bn_root_to(bn1, 33);
+	unsigned int end = clock();
+	bn_print(bn1);
+
+	printf("\nВремя работы в мс: %d\n\n", (end - start) / CLOCKS_PER_SEC);
 
 	return 0;
 }
+
 
