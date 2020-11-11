@@ -3,11 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <math.h>
 #include <ctype.h>
 #include <locale.h>
-#include <time.h>
+#include <stdbool.h>
 
 // ------------------------------------------ ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ----------------------------------------------------
 
@@ -47,9 +46,6 @@ int bn_add_nulls_begin(bn*, size_t);
 // Функция для удаления впереди идущих нулей большого числа
 int Clean_Nulls_Front(bn*);
 
-// Функция для удаления лишних нулей
-int Clean_Nulls_Back(bn*);
-
 // Функция для сравнивания чисел с одинаковым знаком
 int bn_abs_cmp(bn const*, bn const*);
 
@@ -60,7 +56,7 @@ int bn_shift_right(bn*);
 int bn_print(bn const*); 
 
 // Функия для вывода структуры, как она расположена в памяти
-int bn_print1(bn const*);
+int bn_print_ASM(bn const*);
 
 // ------------------------------------------ КОНСТРУКТОРЫ / ДЕСТРУКТОР -----------------------------------------------------
 
@@ -88,6 +84,7 @@ bn* bn_new() {
 	if (ptr_bn->ptr_body == NULL) 
 	{
 		free(ptr_bn);
+		ptr_bn = NULL;
 		return NULL;
 	}
 
@@ -101,13 +98,13 @@ bn* bn_init(const bn* Obj) {
 	}
 
 	bn* ptr_cbn = bn_new();
-	if (ptr_cbn == Obj) {
-		return ptr_cbn;
-	}
 
 	// Копирование значений полей структуры
 	ptr_cbn->size = Obj->size;
 	ptr_cbn->sign = Obj->sign;
+	
+	free(ptr_cbn->ptr_body);
+	ptr_cbn->ptr_body = NULL;
 
 	ptr_cbn->ptr_body = (int*)calloc(ptr_cbn->size, sizeof(int));
 	if (ptr_cbn->ptr_body == NULL) {
@@ -126,7 +123,7 @@ bn* bn_init(const bn* Obj) {
 /* Инициализация значения BN десятичным представлением строки */
 int bn_init_string(bn* Obj, const char* str)
 {
-	if (Obj == NULL)
+	if (Obj == NULL || str == NULL)
 	{
 		return BN_NULL_OBJECT;
 	}
@@ -151,22 +148,28 @@ int bn_init_string(bn* Obj, const char* str)
 	Obj->size = (int)ceil((double)(length - i) / NUM);
 
 	size_t k = length - NUM; // первый индекс рассматриваемой подстроки
+	
+	free(Obj->ptr_body);
+	Obj->ptr_body = NULL;
 	Obj->ptr_body = (int*)calloc(Obj->size, sizeof(int));
 	if (Obj->ptr_body == NULL)
 	{
+		bn_delete(Obj);
 		return BN_NO_MEMORY;
 	}
 
-	char* str_c = (char*)malloc(length * sizeof(char)); // копия исходной строки для прохода по ней со сменой некоторых значений
+	char* str_c = (char*)malloc((length + 1) * sizeof(char)); // копия исходной строки для прохода по ней со сменой некоторых значений
 	if (str_c == NULL)
 	{
+		bn_delete(Obj);
 		return BN_NO_MEMORY;
 	}
+	str_c[length] = '\0';
 	memcpy(str_c, str, length);
 
 	size_t j = 0; //индекс текущего элемента в массиве
 	size_t j_hold;
-	(length - i) % NUM == 0 ? j_hold = Obj->size : j_hold = Obj->size - 1;
+	((length - i) % NUM == 0) ? (j_hold = Obj->size) : (j_hold = Obj->size - 1);
 
 	for (; j < j_hold; k -= NUM, ++j) // рассматриваем с конца подстроки длины NUM
 	{
@@ -271,6 +274,7 @@ int bn_init_int(bn* Obj, int num)
 	}
 	
 	int res_init = bn_init_string(Obj, str);
+	free(str);
 
 	if (res_init != BN_OK)
 	{
@@ -478,15 +482,13 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 
 	// Проверки на равенство нулю
 	if (Obj1->sign == 0) {
-		bn* Obj_c = bn_init(Obj2);
-		int res_ass = Analog_assignment(Obj1, Obj_c);
-		if (res_ass != BN_OK)
-		{
-			return res_ass;
-		}
+		bn* Obj2_c = bn_init(Obj2);
+		int res_ass = Analog_assignment(Obj1, Obj2_c);
+		
 		bn_neg(Obj1);
-
-		return bn_delete(Obj_c);
+		bn_delete(Obj2_c);
+		
+		return res_ass;
 	}
 	if (Obj2->sign == 0) {
 		return BN_OK;
@@ -520,6 +522,7 @@ int bn_sub_to(bn* Obj1, bn const* Obj2) {
 		{
 			bn* bn_null = bn_new();
 			int res_ass = Analog_assignment(Obj1, bn_null);
+			bn_delete(bn_null);
 			return res_ass;
 		}
 	}
@@ -546,6 +549,8 @@ int bn_mul_to(bn* Obj1, bn const* Obj2)
 	}
 
 	int res_ass = Analog_assignment(Obj1, Obj_c);
+	bn_delete(Obj_c);
+
 	return res_ass;
 }
 
@@ -568,7 +573,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 	
 	bn* Obj2_c = bn_init(Obj2); // копия второго объекта
 	bn_abs(Obj2_c); // делаем знак положительным
-
+	
 	bn* Obj_r = bn_new(); // результат деления
 	int res_add = bn_add_nulls_begin(Obj_r, Obj1->size); // добавление ведущих нулей для инициализации
 	if (res_add != BN_OK)
@@ -591,7 +596,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		
 		int curr_num = 0; // результат деления Obj_cur на делитель
 		unsigned int l_hold = 0, // левая граница диапазона значения искомой ячейки числа
-					 r_hold = NOTATION; // правая граница диапазона значения искомой ячейки числа 
+       			     r_hold = NOTATION; // правая граница диапазона значения искомой ячейки числа 
 		
 		if (bn_cmp(Obj_cur, Obj2_c) != -1)
 		{
@@ -629,7 +634,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		}
 		
 		Obj_r->ptr_body[i] = curr_num;
-		
+				
 		if (curr_num != 0)
 		{
 			bn* Obj_sub = bn_new();
@@ -688,7 +693,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		
 		return res_ass;
 	}
-
+	
 	int res_ass = Analog_assignment(Obj1, Obj_r);
 	bn_delete(Obj_r);
 	return res_ass;
@@ -716,27 +721,25 @@ int bn_mod_to(bn* Obj1, bn const* Obj2)
 	int res_err = bn_div_to(Obj_c, Obj2);
 	if (res_err != BN_OK)
 	{
+		bn_delete(Obj_c);
 		return res_err;
 	}
 	
 	res_err = bn_mul_to(Obj_c, Obj2);
 	if (res_err != BN_OK)
 	{
+		bn_delete(Obj_c);
 		return res_err;
 	}
 	
 	res_err = bn_sub_to(Obj1, Obj_c);
 	if (res_err != BN_OK)
 	{
+		bn_delete(Obj_c);
 		return res_err;
 	}
 	
 	res_err = Clean_Nulls_Front(Obj1);
-	if (res_err != BN_OK)
-	{
-		return res_err;
-	}
-
 	bn_delete(Obj_c);
 
 	return res_err;
@@ -756,10 +759,10 @@ int bn_pow_to(bn* Obj, int degree)
 		bn_ed->sign = 1;
 		bn_ed->ptr_body[0] = 1;
 
-		int result = Analog_assignment(Obj, bn_ed);
+		int res_err = Analog_assignment(Obj, bn_ed);
 		bn_delete(bn_ed);
 
-		return result;
+		return res_err;
 	}
 	if (degree == 1 || Obj->sign == 0)
 	{
@@ -797,6 +800,8 @@ int bn_pow_to(bn* Obj, int degree)
 	}
 
 	int res_ass = Analog_assignment(Obj, Obj_c);
+	bn_delete(Obj_c);
+
 	return res_ass;
 }
 
@@ -825,7 +830,7 @@ int bn_root_to(bn* Obj, int root)
 	if (Obj->size == 1)
 	{
 		bn* Obj_r = bn_new();
-		int res_err = bn_init_int(Obj_r, pow(Obj->ptr_body[0], 1 / (double)root));
+		int res_err = bn_init_int(Obj_r, (int)pow(Obj->ptr_body[0], 1 / (double)root));
 		if (res_err != BN_OK)
 		{
 			return res_err;
@@ -1037,67 +1042,76 @@ const char* bn_to_string(bn const* Obj, int radix)
 	
 	bn* Obj_c = bn_init(Obj);
 	bn_abs(Obj_c);
-
+	
 	char* str = (char*)malloc((Obj->size * NUM + 1) * sizeof(char));
 	str[Obj->size * NUM] = '\0';
-
+	///////////////////////////////////
 	size_t i = 0;
 	
-	while (Obj_c->sign != 0)
+	while (Obj_c->sign != 0 && i < Obj->size*NUM)
 	{
 		bn* Obj_mod = bn_mod(Obj_c, Obj_rad);
-		
 		if (Obj_mod == NULL) 
 		{
 			bn_delete(Obj_c);
 			bn_delete(Obj_rad);
+			free(str);
 			return NULL;
 		}
 
 		str[Obj->size * NUM - (i++) - 1] = int_to_char(Obj_mod->ptr_body[0]);
+		bn_delete(Obj_mod);
 
 		res_err = bn_div_to(Obj_c, Obj_rad);
 		if (res_err != BN_OK)
 		{
 			return NULL;
 		}
-
-		bn_delete(Obj_mod);
 	}
-	
+		
 	bn_delete(Obj_rad);
 	bn_delete(Obj_c);
 	
-	char* str_r;
 	size_t k = 0;
+	int size_r;
+	
+	(Obj->sign == -1) ? (size_r = i + 2) : (size_r = i + 1);
+
+	char* str_r = (char*)malloc(size_r * sizeof(char));
+	if (str_r == NULL)
+	{
+		free(str);
+		return NULL;
+	}
 
 	if (Obj->sign == -1)
 	{
-		str_r = (char*)malloc((i + 1) * sizeof(char));
-		if (str_r == NULL)
-		{
-			free(str);
-			return NULL;
-		}
 		str_r[k++] = '-';
 	}
-	else
-	{
-		str_r = (char*)malloc(i * sizeof(char));
-		if (str_r == NULL)
-		{
-			free(str);
-			return NULL;
-		}
-	}
 
-	for (size_t j = Obj->size * NUM - i; j < Obj->size * NUM + 1; ++j, ++k)
+	for (size_t j = 0; j < Obj->size * NUM; ++j, ++k)
 	{
 		str_r[k] = str[j];
 	}
-
+	str_r[k] = '\0';
 
 	free(str);
+	
+	// удаление ведущих нулей
+        size_t m;
+	size_t count_num = 0;
+	(Obj->sign == -1) ? (m = 1) : (m = 0);
+	for (;str_r[m] == '0'; ++m, ++count_num);
+
+	size_t n;
+	(Obj->sign == -1) ? (n = 1) : (n = 0);
+	for (; n < strlen(str_r) - count_num; ++n)
+	{		
+		str_r[n] = str_r[count_num + n];
+	}
+
+	//str_r = (char*)realloc(str_r, (strlen(str_r) - m + 1) * sizeof(char));
+	str_r[strlen(str_r) - count_num] = '\0';
 
 	return str_r;
 }
@@ -1226,22 +1240,23 @@ int bn_div_int(bn* Obj, int number)
 
 int Analog_assignment(bn* Obj1, bn* Obj2)
 {
-
 	if (Obj1 == NULL || Obj2 == NULL)
 	{
 		return BN_NULL_OBJECT;
 	}
 
 	Obj1->sign = Obj2->sign;
+	
+	if (Obj1->ptr_body != NULL)
+	{
+		free(Obj1->ptr_body);
+		Obj1->ptr_body = NULL;
+	}
 
-	int* arr = (int*)realloc(Obj1->ptr_body, sizeof(int) * Obj2->size);
-	if (arr == NULL)
+	Obj1->ptr_body = (int*)malloc(sizeof(int) * Obj2->size);
+	if (Obj1->ptr_body == NULL)
 	{
 		return BN_NO_MEMORY;
-	}
-	else
-	{
-		Obj1->ptr_body = arr;
 	}
 
 	for (size_t i = 0; i < Obj2->size; ++i)
@@ -1355,23 +1370,19 @@ int bn_add_nulls_begin(bn* Obj, size_t newsize)
 		return BN_OK;
 	}
 	
-	int* arr = (int*)realloc(Obj->ptr_body, newsize * sizeof(int));
-	if (arr == NULL)
+	Obj->ptr_body = (int*)realloc(Obj->ptr_body, newsize * sizeof(int));
+	if (Obj->ptr_body == NULL)
 	{
 		return BN_NO_MEMORY;
 	}
-	else
+
+	for (size_t i = Obj->size; i < newsize; ++i)
 	{
-		Obj->ptr_body = arr;
-
-		for (size_t i = Obj->size; i < newsize; ++i)
-		{
-			Obj->ptr_body[i] = 0;
-		}
-
-		Obj->size = newsize;
-		return BN_OK;
+		Obj->ptr_body[i] = 0;
 	}
+
+	Obj->size = newsize;
+	return BN_OK;	
 }
 
 int Clean_Nulls_Front(bn* Obj)
@@ -1381,61 +1392,34 @@ int Clean_Nulls_Front(bn* Obj)
 		return BN_NULL_OBJECT;
 	}
 
-	size_t i = Obj->size - 1;
-	for (; Obj->ptr_body[i] == 0; --i);
-
-	if (i + 1 == 0)
+	if (Obj->size == 1)
 	{
-		free(Obj->ptr_body);
-		Obj->ptr_body = (int*)calloc(1, sizeof(int));
+		return BN_OK;
+	}
 
+	int i = Obj->size - 1;
+	for (; Obj->ptr_body[i] == 0 && i > 0; --i);
+	if (Obj->ptr_body[i] == 0)
+	{
+		--i;
+	}
+
+	
+	if (i == -1)
+	{		
+		Obj->ptr_body = (int*)realloc(Obj->ptr_body, 1 * sizeof(int));
 		Obj->size = 1;
-		Obj->sign = 0;
-		return BN_OK;;
+		
+		return BN_OK;
 	}
 	
-	int* arr = (int*)calloc((i+1), sizeof(int));
-	if (arr == NULL)
+	Obj->ptr_body = (int*)realloc(Obj->ptr_body, (i+1) * sizeof(int));
+	if (Obj->ptr_body == NULL)
 	{
 		return BN_NO_MEMORY;
-	}
+	}	
 	
-	for (size_t j = 0; j < i + 1; ++j)
-	{
-		arr[j] = Obj->ptr_body[j];
-	}
-
-	Obj->ptr_body = arr;
 	Obj->size = i + 1;
-
-	return BN_OK;
-}
-
-int Clean_Nulls_Back(bn* Obj)
-{
-	if (Obj == NULL)
-	{
-		return BN_NULL_OBJECT;
-	}
-
-	size_t i = 0;
-	for (; Obj->ptr_body[i] == 0; ++i);
-
-	for (size_t j = 0; j < Obj->size - i; ++j)
-	{
-		Obj->ptr_body[j] = Obj->ptr_body[j + i];
-	}
-	
-	int* arr = (int*)realloc(Obj->ptr_body, (Obj->size - i) * sizeof(int));
-	if (arr == NULL)
-	{
-		return BN_NO_MEMORY;
-	}
-	else
-	{
-		Obj->ptr_body = arr;
-		Obj->size -= i;
-	}
 
 	return BN_OK;
 }
@@ -1496,30 +1480,19 @@ int bn_shift_right(bn* Obj)
 
 	arr[Obj->size] = 0;
 	++Obj->size;
-	Obj->ptr_body = arr;
-	
+                                                                                                                           	
 	for (size_t i = Obj->size - 1; i > 0; --i)
 	{
-		Obj->ptr_body[i] = Obj->ptr_body[i - 1];
+		arr[i] = arr[i - 1];
 	}
-	Obj->ptr_body[0] = 0;
+	arr[0] = 0;
+
+	Obj->ptr_body = NULL;
+	Obj->ptr_body = arr;
 
 	int res_err = Clean_Nulls_Front(Obj);
-	if (res_err != BN_OK)
-	{
-		return res_err;
-	}
 
-	if (Obj == NULL)
-	{
-		bn* Obj_null = bn_new();
-		res_err = Analog_assignment(Obj, Obj_null);
-		bn_delete(Obj_null);
-
-		return res_err;
-	}
-
-	return BN_OK;
+	return res_err;
 }
 
 int bn_print(bn const* Obj)
@@ -1566,7 +1539,7 @@ int bn_print(bn const* Obj)
 	return BN_OK;
 }
 
-int bn_print1(bn const* Obj)
+int bn_print_ASM(bn const* Obj)
 {
 	if (Obj == NULL)
 	{
@@ -1588,20 +1561,19 @@ int bn_print1(bn const* Obj)
 
 int main()
 {
-	setlocale(LC_ALL, "RUS");
-
 	bn* bn1 = bn_new();
-	bn_init_string(bn1, "5647589345883495834568934583495834725687345438573458745468593568370160457");
+	bn_init_string(bn1 , "-7435683479568758465703");
 	bn_print(bn1);
 
-	unsigned int start = clock();
-	int res = bn_root_to(bn1, 33);
-	unsigned int end = clock();
-	bn_print(bn1);
+	bn* bn2 = bn_new();
+	bn_init_string(bn2, "6587675");
+	bn_print(bn2);
 
-	printf("\nВремя работы в мс: %d\n\n", (end - start) / CLOCKS_PER_SEC);
+	bn_add_to(bn1, bn2);
+	bn_print(bn1);
 
 	return 0;
 }
+
 
 
