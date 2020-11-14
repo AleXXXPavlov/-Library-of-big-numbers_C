@@ -1392,7 +1392,9 @@ int bn_mul_col(bn* Obj1, bn const* Obj2)
 		return NULL;
 	}
 
-	return Analog_assignment(Obj1, Obj_r);
+	res_err = Analog_assignment(Obj1, Obj_r);
+	bn_delete(res_err);
+	return res_err;
 }
 
 
