@@ -603,7 +603,7 @@ int bn_mul_to(bn * Obj1, bn const* Obj2)
 }
 
 /* Функция для деления одного большого числа на другое */
-int bn_div_to(bn * Obj1, bn const* Obj2)
+int bn_div_to(bn* Obj1, bn const* Obj2)
 {
 	if (Obj1 == NULL || Obj2 == NULL)
 	{
@@ -708,20 +708,6 @@ int bn_div_to(bn * Obj1, bn const* Obj2)
 	}
 
 	Obj_r->sign = Obj1->sign * Obj2->sign;
-	if (Obj_cur->sign != 0 && Obj_r->sign == -1)
-	{
-		bn* Obj_ed = bn_new();
-		Obj_ed->sign = 1;
-		Obj_ed->ptr_body[0] = 1;
-
-		int res_sub = bn_sub_to(Obj_r, Obj_ed);
-		bn_delete(Obj_ed);
-
-		if (res_sub != BN_OK)
-		{
-			return res_sub;
-		}
-	}
 
 	bn_delete(Obj_cur);
 	bn_delete(Obj2_c);
@@ -1848,14 +1834,23 @@ char* GiveStr(bn* Obj)
 
 int main()
 {
-	char* str1 = GetStr();
-
 	bn* bn1 = bn_new();
+	char* str1 = GetStr();
 	bn_init_string(bn1, str1);
 	free(str1);
 
-	bn_root_to(bn1, 2);
+	char oper = getchar();
+
+	bn* bn2 = bn_new();
+	char* str2 = GetStr();
+	bn_init_string(bn2, str2);
+	free(str2);
+
+	bn_div_to(bn1, bn2);
+	bn_delete(bn2);
+
 	char* str = GiveStr(bn1);
+	bn_delete(bn1);
 
 	printf("%s", str);
 	free(str);
