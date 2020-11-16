@@ -120,6 +120,11 @@ int bn_print(bn const*);
 // Функия для вывода структуры, как она расположена в памяти
 int bn_print_ASM(bn const*);
 
+// Функция для ввода строки произвольной длины
+char* GetStr();
+
+// Функция для получения числа в 10-й системе счисления в виде строки
+char* GiveStr(bn const*);
 
 // ------------------------------------------ КОНСТРУКТОРЫ / ДЕСТРУКТОР -----------------------------------------------------
 
@@ -1672,35 +1677,10 @@ int bn_print(bn const* Obj)
 	printf("-----------------------------------------------------------\n");
 	printf("Sign = %d\nLength = %ld\nAbsolute value = ", Obj->sign, Obj->size);
 
-	for (int i = Obj->size - 1; i != -1; --i) {
-		if (i != Obj->size - 1 && Obj->ptr_body[i] != 0)
-		{
-			int el_size = (int)ceil(log10(Obj->ptr_body[i]));
-			if ((el_size < NUM))
-			{
-				for (int j = 0; j < NUM - el_size; ++j)
-				{
-					printf("0");
-				}
-			}
-			printf("%d", Obj->ptr_body[i]);
-		}
-		else if (i == Obj->size - 1)
-		{
-			printf("%d", Obj->ptr_body[i]);
-		}
-		else if (i == 0 && Obj->ptr_body[i] == 0)
-		{
-			printf("%d", 0);
-		}
-		else // i != 0 && i != Obj->size - 1 && Obj->ptr_body[i] = 0
-		{
-			for (int i = 0; i < NUM; ++i)
-			{
-				printf("%d", 0);
-			}
-		}
-	}
+	char* str = GiveStr(Obj);
+	printf("%s", str);
+	free(str);
+
 	printf("\n-----------------------------------------------------------\n");
 
 	return BN_OK;
@@ -1724,11 +1704,10 @@ int bn_print_ASM(bn const* Obj)
 	return BN_OK;
 }
 
-// ---------------------------------------------------------------------------------------------------
 char* GetStr()
 {
 	int size = 0;
-	int capacity = 1;
+	int capacity = 50;
 
 	char* str = (char*)malloc(capacity * sizeof(char));
 	char c = getchar();
@@ -1749,7 +1728,7 @@ char* GetStr()
 
 		c = getchar();
 	}
-
+	str = (char*)realloc(str, (size + 1) * sizeof(char));
 	str[size] = '\0';
 
 	return str;
@@ -1832,6 +1811,8 @@ char* GiveStr(bn* Obj)
 	return str;
 }
 
+// ---------------------------------------------------------------------------------------------------
+
 int main()
 {
 	bn* bn1 = bn_new();
@@ -1839,15 +1820,7 @@ int main()
 	bn_init_string(bn1, str1);
 	free(str1);
 
-	char oper = getchar();
-
-	bn* bn2 = bn_new();
-	char* str2 = GetStr();
-	bn_init_string(bn2, str2);
-	free(str2);
-
-	bn_div_to(bn1, bn2);
-	bn_delete(bn2);
+	bn_root_to(bn1, 2);
 
 	char* str = GiveStr(bn1);
 	bn_delete(bn1);
@@ -1857,3 +1830,4 @@ int main()
 
 	return 0;
 }
+
