@@ -1363,10 +1363,10 @@ int bn_mul_col(bn* Obj1, bn const* Obj2)
 		return res_err;
 	}
 
-	int res_add = bn_add_nulls_begin(Obj_r, Obj1->size + Obj2->size);
-	if (res_add != BN_OK)
+	res_err = bn_add_nulls_begin(Obj_r, Obj1->size + Obj2->size);
+	if (res_err != BN_OK)
 	{
-		return NULL;
+		return res_err;
 	}
 
 	Obj_r->sign = Obj1->sign * Obj2->sign;
@@ -1386,14 +1386,14 @@ int bn_mul_col(bn* Obj1, bn const* Obj2)
 		}
 	}
 
-	int res_cl = Clean_Nulls_Front(Obj_r);
-	if (res_cl != BN_OK)
+	res_err = Clean_Nulls_Front(Obj_r);
+	if (res_err != BN_OK)
 	{
-		return NULL;
+		return res_err;
 	}
 
 	res_err = Analog_assignment(Obj1, Obj_r);
-	bn_delete(res_err);
+	bn_delete(Obj_r);
 	return res_err;
 }
 
@@ -1769,8 +1769,96 @@ char* GetStr()
 	return str;
 }
 
+char* GiveStr(bn* Obj)
+{
+	if (Obj == NULL)
+	{
+		return NULL;
+	}
+	if (Obj->sign == 0)
+	{
+		char* str = (char*)malloc(2 * sizeof(char));
+		str[0] = '0';
+		str[1] = '\0';
+		return str;
+	}
+
+	int begin = 0;
+	char* str;
+	if (Obj->sign == -1)
+	{
+		str = (char*)malloc((Obj->size * NUM + 2) * sizeof(char));
+		str[0] = '-';
+		begin = 1;
+	}
+	else
+	{
+		str = (char*)malloc((Obj->size * NUM + 1) * sizeof(char));
+	}
+
+	int add_num = 8;
+
+	for (int i = Obj->size - 1; i != -1; --i)
+	{
+		char add_str[10];
+		add_str[9] = '\0';
+
+		if (i == Obj->size - 1)
+		{
+			add_num = (int)ceil(log10(Obj->ptr_body[i])) - 1;
+			if (Obj->ptr_body[i] == (int)pow(10, add_num + 1))
+			{
+				++add_num;
+			}
+
+			str = (char*)realloc(str, ((Obj->size - 1) * NUM + add_num + 2 + begin) * sizeof(char));
+			str[(Obj->size - 1) * NUM + add_num + 1 + begin] = '\0';
+			sprintf(add_str, "%d", Obj->ptr_body[i]);
+			add_str[9] = '\0';
+
+			memcpy(str + begin, add_str, add_num + 1);
+		}
+		else
+		{
+			sprintf(add_str, "%d", Obj->ptr_body[i]);
+
+			if (strlen(add_str) < 9)
+			{
+				int len = strlen(add_str);
+				int k = 8;
+				for (; k > 8 - len; --k)
+				{
+					add_str[k] = add_str[k - (9 - len)];
+				}
+
+				for (; k != -1; --k)
+				{
+					add_str[k] = '0';
+				}
+			}
+			add_str[9] = '\0';
+
+			memcpy(str + add_num + 1 + begin, add_str, 9);
+			add_num += 9;
+		}
+	}
+
+	return str;
+}
+
 int main()
 {
+	char* str1 = GetStr();
+
+	bn* bn1 = bn_new();
+	bn_init_string(bn1, str1);
+	free(str1);
+
+	bn_root_to(bn1, 2);
+	char* str = GiveStr(bn1);
+
+	printf("%s", str);
+	free(str);
 
 	return 0;
 }
