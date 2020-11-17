@@ -126,6 +126,9 @@ char* GetStr();
 // Функция для получения числа в 10-й системе счисления в виде строки
 char* GiveStr(bn const*);
 
+// Функция для взятия корня большого числа
+bn* bn_sqrt(bn const*);
+
 // ------------------------------------------ КОНСТРУКТОРЫ / ДЕСТРУКТОР -----------------------------------------------------
 
 /* Конструктор */
@@ -1667,6 +1670,74 @@ int PrintFibo(int num)
 	return BN_OK;
 }
 
+bn* bn_sqrt(bn const* Obj)
+{
+	if (Obj == NULL)
+	{
+		return NULL;
+	}
+	if (Obj->sign < 0)
+	{
+		printf("\nПроверьте корректность данных\n");
+		return NULL;
+	}
+	if (Obj->sign == 0)
+	{
+		bn* Obj_r = bn_new();
+		return Obj_r;
+	}
+
+	int ind_now = (Obj->size + 1) / 2;
+
+	bn* Obj_curr = bn_new();
+	bn_add_nulls_begin(Obj_curr, ind_now);
+	Obj_curr->size = ind_now;
+	Obj_curr->sign = 1;
+
+	--ind_now;
+
+	bn* Obj_c = bn_new();
+	int l_hold, r_hold, curr_num, k;
+	while (ind_now >= 0)
+	{
+		l_hold = 0;
+		r_hold = NOTATION;
+		curr_num = 0;
+
+		while (l_hold <= r_hold)
+		{
+			k = (l_hold + r_hold) >> 1;
+			Obj_curr->ptr_body[ind_now] = k;
+
+			Analog_assignment(Obj_c, Obj_curr);
+			bn_pow_to(Obj_c, 2);
+
+			if (bn_cmp(Obj_c, Obj) != 1)
+			{
+				curr_num = k;
+				l_hold = k + 1;
+			}
+			else
+			{
+				r_hold = k - 1;
+			}
+		}
+
+		Obj_curr->ptr_body[ind_now] = curr_num;
+		--ind_now;
+	}
+
+	bn_delete(Obj_c);
+
+	int res_err = Clean_Nulls_Front(Obj_curr);
+	if (res_err != BN_OK)
+	{
+		return NULL;
+	}
+
+	return Obj_curr;
+}
+
 int bn_print(bn const* Obj)
 {
 	if (Obj == NULL)
@@ -1734,7 +1805,7 @@ char* GetStr()
 	return str;
 }
 
-char* GiveStr(bn* Obj)
+char* GiveStr(bn const* Obj)
 {
 	if (Obj == NULL)
 	{
@@ -1820,10 +1891,11 @@ int main()
 	bn_init_string(bn1, str1);
 	free(str1);
 
-	bn_root_to(bn1, 2);
+	bn* bn2 = bn_sqrt(bn1);
 
-	char* str = GiveStr(bn1);
+	char* str = GiveStr(bn2);
 	bn_delete(bn1);
+	bn_delete(bn2);
 
 	printf("%s", str);
 	free(str);
