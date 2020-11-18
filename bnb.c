@@ -9,11 +9,11 @@
 #include <time.h>
 
 /* Определения структуры bn и ее функций */
-struct bn_s {
+typedef struct bn_s {
 	int* ptr_body; // указатель на начало массива цифр
 	size_t size; // размер массива
 	int sign; // знак числа
-};
+} bn;
 
 const unsigned int NOTATION = 1000000000; // система счисления 10 ^ n, в которой записаны числа в массив
 const int NUM = 9; // максимальное количество цифр в любой ячейке хранения
