@@ -8,17 +8,10 @@
 #include <stdbool.h>
 #include <time.h>
 
-/* Определения структуры bn и ее функций */
-typedef struct bn_s {
-	int* ptr_body; // указатель на начало массива цифр
-	size_t size; // размер массива
-	int sign; // знак числа
-} bn;
+// ------------------------------------------ ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ----------------------------------------------------
 
 const unsigned int NOTATION = 1000000000; // система счисления 10 ^ n, в которой записаны числа в массив
 const int NUM = 9; // максимальное количество цифр в любой ячейке хранения
-
-// ------------------------------------------ ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ----------------------------------------------------
 
 // Функция для преобразования символа в цифру
 int char_to_int(char);
@@ -79,6 +72,13 @@ bn* bn_sqrt(bn const*);
 
 // ------------------------------------------ КОНСТРУКТОРЫ / ДЕСТРУКТОР -----------------------------------------------------
 
+/* Определения структуры bn и ее функций */
+struct bn_s {
+	int* ptr_body; // указатель на начало массива цифр
+	size_t size; // размер массива
+	int sign; // знак числа
+};
+
 /* Конструктор */
 bn* bn_new() {
 	bn* ptr_bn = (bn*)malloc(sizeof(bn)); // выделем место под структуру
@@ -114,7 +114,7 @@ bn* bn_init(const bn* Obj) {
 	// Копирование значений полей структуры
 	ptr_cbn->size = Obj->size;
 	ptr_cbn->sign = Obj->sign;
-
+	
 	free(ptr_cbn->ptr_body);
 	ptr_cbn->ptr_body = NULL;
 
@@ -228,7 +228,7 @@ int bn_init_string_radix(bn* Obj, const char* str, int radix)
 	}
 
 	Obj->size = 1;
-
+	
 
 	int res; // код результатов операций
 	for (size_t j = i; j < length; ++j)
@@ -694,7 +694,7 @@ int bn_div_to(bn* Obj1, bn const* Obj2)
 		return res_err;
 	}
 
-	res_err = Analog_assignment(Obj1, Obj_r);
+    res_err = Analog_assignment(Obj1, Obj_r);
 	bn_delete(Obj_r);
 	return res_err;
 }
@@ -830,7 +830,7 @@ int bn_root_to(bn* Obj, int root)
 	{
 		bn* Obj_r = bn_sqrt(Obj);
 		int res_err = Analog_assignment(Obj, Obj_r);
-
+		
 		bn_delete(Obj_r);
 		return res_err;
 	}
@@ -873,16 +873,47 @@ int bn_root_to(bn* Obj, int root)
 
 	bool ind_r = false;
 	bn* Obj_curr = bn_init(Obj_r);
+
 	for (;;)
 	{
-
+		
 		if (Obj_curr->size / root) Obj_curr->size /= root;
+		
+		bn* Obj_oper1 = bn_pow(Obj_r, root);
+		bn* Obj_oper2 = bn_pow(Obj_r, root - 1);
 
-		res_err = bn_sub_to(Obj_curr, bn_div(bn_sub(bn_pow(Obj_r, root), Obj_c), bn_mul(Obj_root, bn_pow(Obj_r, root - 1))));
+		res_err = bn_sub_to(Obj_oper1, Obj_c);
 		if (res_err != BN_OK)
 		{
+			bn_delete(Obj_oper1);
+			bn_delete(Obj_oper2);
 			return res_err;
 		}
+
+		res_err = bn_mul_to(Obj_oper2, Obj_root);
+		if (res_err != BN_OK) {
+			bn_delete(Obj_oper1);
+			bn_delete(Obj_oper2);
+			return res_err;
+		}
+
+		res_err = bn_div_to(Obj_oper1, Obj_oper2);
+		if (res_err != BN_OK) {
+			bn_delete(Obj_oper1);
+			bn_delete(Obj_oper2);
+			return res_err;
+		}
+
+		res_err = bn_sub_to(Obj_curr, Obj_oper1);
+		if (res_err != BN_OK)
+		{
+			bn_delete(Obj_oper1);
+			bn_delete(Obj_oper2);
+			return res_err;
+		}
+
+		bn_delete(Obj_oper1);
+		bn_delete(Obj_oper2);
 
 		if (bn_cmp(Obj_r, Obj_curr) == 0 || (bn_cmp(Obj_r, Obj_curr) < 0 && ind_r))
 		{
@@ -896,24 +927,49 @@ int bn_root_to(bn* Obj, int root)
 		{
 			return res_err;
 		}
-
+		
 	}
+
 	bn_delete(Obj_curr);
+	bn_delete(Obj_root);
 
 	bn* Obj_ed = bn_new();
 	Obj_ed->sign = 1;
 	Obj_ed->ptr_body[0] = 1;
-
-	while (bn_cmp(bn_pow(Obj_r, root), Obj_c) == 1)
+	
+	bn* Obj_oper = bn_pow(Obj_r, root);
+	while (bn_cmp(Obj_oper, Obj_c) == 1)
 	{
 		res_err = bn_sub_to(Obj_r, Obj_ed);
 		if (res_err != BN_OK)
 		{
+			bn_delete(Obj_oper);
 			bn_delete(Obj_ed);
+			bn_delete(Obj_c);
+			bn_delete(Obj_r);
+			return res_err;
+		}
+
+		res_err = Analog_assignment(Obj_oper, Obj_r);
+		if (res_err != BN_OK) {
+			bn_delete(Obj_oper);
+			bn_delete(Obj_ed);
+			bn_delete(Obj_c);
+			bn_delete(Obj_r);
+			return res_err;
+		}
+
+		res_err = bn_pow_to(Obj_oper, root);
+		if (res_err != BN_OK) {
+			bn_delete(Obj_oper);
+			bn_delete(Obj_ed);
+			bn_delete(Obj_c);
+			bn_delete(Obj_r);
 			return res_err;
 		}
 	}
 
+	bn_delete(Obj_oper);
 	bn_delete(Obj_ed);
 	bn_delete(Obj_c);
 
@@ -1020,7 +1076,7 @@ bn* bn_mod(bn const* Obj1, bn const* Obj2)
 }
 
 /* Функция для предстваления BN в некоторой системе счисления radix в виде строки */
-const char* bn_to_string(bn const* Obj, int radix)
+char* bn_to_string(bn const* Obj, int radix)
 {
 	if (Obj == NULL)
 	{
@@ -1071,7 +1127,7 @@ const char* bn_to_string(bn const* Obj, int radix)
 		if (i == str_size - 1)
 		{
 			str_size *= 2;
-			str = realloc(str, str_size * sizeof(int));
+			str = (char*)realloc(str, str_size * sizeof(int));
 			for (size_t j = i + 1; j < str_size; ++j)
 			{
 				str[j] = '\0';
@@ -1206,7 +1262,7 @@ int bn_div_int(bn* Obj, long long number)
 	}
 
 	long long curr_div = 0,
-		curr_mod = 0;
+			  curr_mod = 0;
 
 	for (int i = Obj->size - 1; i >= 0; --i)
 	{
@@ -1292,7 +1348,7 @@ int bn_mul_col(bn* Obj1, bn const* Obj2)
 
 	if (Obj1->sign == 0 || Obj2->sign == 0)
 	{
-		res_err = Analog_assignment(Obj1, Obj_r);
+		res_err =  Analog_assignment(Obj1, Obj_r);
 		bn_delete(Obj_r);
 		return res_err;
 	}
@@ -1300,7 +1356,7 @@ int bn_mul_col(bn* Obj1, bn const* Obj2)
 	int res_add = bn_add_nulls_begin(Obj_r, Obj1->size + Obj2->size);
 	if (res_add != BN_OK)
 	{
-		return NULL;
+		return res_add;
 	}
 
 	Obj_r->sign = Obj1->sign * Obj2->sign;
@@ -1323,7 +1379,7 @@ int bn_mul_col(bn* Obj1, bn const* Obj2)
 	int res_cl = Clean_Nulls_Front(Obj_r);
 	if (res_cl != BN_OK)
 	{
-		return NULL;
+		return res_cl;
 	}
 
 	res_err = Analog_assignment(Obj1, Obj_r);
@@ -1532,7 +1588,7 @@ int PrintFibo(int num)
 	if (j % 2 == 0)
 	{
 		bn_delete(Obj1);
-
+		
 		for (int i = Obj2->size - 1; i != -1; --i) {
 			if (i != Obj2->size - 1 && Obj2->ptr_body[i] != 0)
 			{
@@ -1568,7 +1624,7 @@ int PrintFibo(int num)
 	else
 	{
 		bn_delete(Obj2);
-
+		
 		for (int i = Obj1->size - 1; i != -1; --i) {
 			if (i != Obj1->size - 1 && Obj1->ptr_body[i] != 0)
 			{
@@ -1628,17 +1684,17 @@ bn* bn_sqrt(bn const* Obj)
 	bn_add_nulls_begin(Obj_curr, ind_now);
 	Obj_curr->size = ind_now;
 	Obj_curr->sign = 1;
-
+	
 	--ind_now;
-
+	
 	bn* Obj_c = bn_new();
-	int l_hold, r_hold, curr_num, k;
+	int l_hold, r_hold, curr_num, k; 
 	while (ind_now >= 0)
 	{
 		l_hold = 0;
 		r_hold = NOTATION;
 		curr_num = 0;
-
+		
 		while (l_hold <= r_hold)
 		{
 			k = (l_hold + r_hold) >> 1;
@@ -1657,7 +1713,7 @@ bn* bn_sqrt(bn const* Obj)
 				r_hold = k - 1;
 			}
 		}
-
+		
 		Obj_curr->ptr_body[ind_now] = curr_num;
 		--ind_now;
 	}
@@ -1683,9 +1739,9 @@ int bn_print(bn const* Obj)
 	printf("-----------------------------------------------------------\n");
 	printf("Sign = %d\nLength = %ld\nAbsolute value = ", Obj->sign, Obj->size);
 
-	char* str = bn_to_string(Obj, 10);
+	const char* str = bn_to_string(Obj, 10);
 	printf("%s", str);
-	free(str);
+	
 
 	printf("\n-----------------------------------------------------------\n");
 
@@ -1739,6 +1795,82 @@ char* GetStr()
 
 	return str;
 }
+
+int main() {
+	bn *a = bn_new(); // a = 0
+	bn *b = bn_init(a); // b то>е = 0
+	int code = bn_init_string(a, "123456789012345678");
+	
+	code = bn_init_int(b, 999); // b = 999
+	code = bn_add_to(a, b); // a = 123456789012346677
+	code = bn_pow_to(b, 5); // b = 999^5
+	code = bn_root_to(b, 5); // b = 999 ###################################################################
+	code = bn_init_int(a, 0); // a = 0
+	code = bn_div_to(b,a); // OOPS, 999/0
+	if (code != 0) {
+		printf("bn_div_to failed, code=%d\n", code);
+	}
+
+	bn *c = bn_new();
+	code = bn_init_int(c, 222);
+	bn *d = bn_new();
+	code = bn_init_int(d, 333);
+	bn *e = bn_add(c, d); // e = 555
+	bn *f = bn_mod(e, c); // f = 111
+	char *r1 = bn_to_string(f,10); // r1 -> "111"
+	printf("f=%s\n", r1);
+	free(r1);
+
+	code = bn_cmp(c, d);
+	if (code < 0) {
+	printf("c < d\n");
+	}
+	else if (code == 0) {
+	printf("c == d\n");
+	}
+	else {
+	printf("c > d\n");
+	}
+	code = bn_neg(b); // b = -999;
+	int bsign = bn_sign(b); // bsign = -1
+	code = bn_abs(b); // b = 999;
+	bn_delete(f); // Gабудете удалит+ - провалите тесты
+	bn_delete(e);
+	bn_delete(d);
+	bn_delete(c);
+	bn_delete(b);
+	bn_delete(a);
+	return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
